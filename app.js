@@ -7,7 +7,6 @@
   const sharpNotes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const flatNotes = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
   const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' });
-  const storageKey = 'songlist-owner-draft-v1';
   let songs = [];
   let user = null;
   let supabase = null;
@@ -15,6 +14,7 @@
   let pendingImport = [];
   let toastTimer = 0;
   let writeChain = Promise.resolve();
+  let loadGeneration = 0;
 
   function escapeHtml(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -95,6 +95,16 @@
     toastTimer = window.setTimeout(() => toast.classList.remove('show'), 2800);
   }
 
+  function userDisplayName() {
+    if (!user) return '';
+    const metadata = user.user_metadata || {};
+    return String(metadata.full_name || metadata.name || user.email?.split('@')[0] || 'ユーザー').trim();
+  }
+
+  function updateListTitle() {
+    $('#list-title').textContent = user ? userDisplayName() + 'のソングリスト' : '公開ソングリスト';
+  }
+
   function setSyncState(label, state) {
     $('#sync-label').textContent = label;
     $('#sync-status').classList.remove('ok', 'warn');
@@ -127,7 +137,7 @@
 
   function filteredSongs() {
     const query = $('#search-input').value.trim().toLocaleLowerCase('ja');
-    const showHidden = isOwner && $('#show-hidden').checked;
+    const showHidden = Boolean(user) && $('#show-hidden').checked;
     const list = songs.filter((song) => {
       if (!song.visible && !showHidden) return false;
       if (!query) return true;
@@ -150,13 +160,13 @@
     const visibilityIcon = song.visible
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>'
       : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 6.1A10 10 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3.1 3.7M6.2 6.2C3.4 8 2 12 2 12s3.5 6 10 6c1.3 0 2.5-.3 3.5-.7"/></svg>';
-    const adminActions = isOwner
+    const adminActions = user
       ? actionButton('toggle-visible', song.id, '', song.visible ? '一覧から非表示にする' : '一覧に表示する', visibilityIcon) + actionButton('sung', song.id, '', '今日歌った', '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15l2 2 5-5"/></svg>', 'recorded') + actionButton('edit', song.id, '', '編集', '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5 4 4M4 20l4-.8L19.5 7.7a2.12 2.12 0 0 0-3-3L5 16.2 4 20Z"/></svg>') + actionButton('delete', song.id, '', '削除', '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v6m6-6v6"/></svg>')
       : '';
     const searchCell = '<td class="search-cell"><div class="row-actions search-actions">' + chordSearch + '</div></td>';
-    const actionCell = isOwner ? '<td><div class="row-actions">' + adminActions + '</div></td>' : '';
+    const actionCell = user ? '<td><div class="row-actions">' + adminActions + '</div></td>' : '';
     const sungKeyLabel = (key || '—') + ' (' + signed(song.transpose) + ')';
-    const quickKey = isOwner
+    const quickKey = user
       ? '<span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><button class="key-nudge" type="button" data-action="transpose" data-delta="-1" data-id="' + escapeHtml(song.id) + '" aria-label="半音下げる">−</button><span class="key-chip" title="自分が歌うキー（原曲からの移調）">' + escapeHtml(sungKeyLabel) + '</span><button class="key-nudge" type="button" data-action="transpose" data-delta="1" data-id="' + escapeHtml(song.id) + '" aria-label="半音上げる">＋</button><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>'
       : '<span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><span class="key-chip" title="自分が歌うキー（原曲からの移調）">' + escapeHtml(sungKeyLabel) + '</span><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>';
     const hiddenMark = song.visible ? '' : '<span class="hidden-pill">非表示</span>';
@@ -172,7 +182,7 @@
 
   function render() {
     const list = filteredSongs();
-    const countScope = isOwner ? songs : songs.filter((song) => song.visible);
+    const countScope = user ? songs : songs.filter((song) => song.visible);
     const artistCount = new Set(countScope.map((song) => song.artist)).size;
     $('#artist-count').textContent = artistCount.toLocaleString('ja-JP');
     $('#song-count').textContent = countScope.length.toLocaleString('ja-JP');
@@ -184,22 +194,22 @@
       $('#song-list').innerHTML = '';
       return;
     }
-    const actionHead = isOwner ? '<th scope="col">操作</th>' : '';
-    const actionCol = isOwner ? '<col class="actions">' : '';
+    const actionHead = user ? '<th scope="col">操作</th>' : '';
+    const actionCol = user ? '<col class="actions">' : '';
     const notesHead = user ? '<th scope="col">備考</th>' : '';
     const notesCol = user ? '<col class="notes">' : '';
-    const listType = isOwner ? ' owner-list' : user ? ' authenticated-list' : ' public-list';
+    const listType = user ? ' owner-list' : ' public-list';
     $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">原曲 → 歌うキー（移調） / 平行調</th><th class="search-heading" scope="col" title="Chordwikiで検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + list.map(songRow).join('') + '</tbody></table>';
   }
 
   function updateAccessUi() {
     isOwner = Boolean(user && config.adminUserId && user.id === config.adminUserId);
-    document.querySelectorAll('.admin-only').forEach((element) => element.classList.toggle('hidden', !isOwner));
+    document.querySelectorAll('.user-only').forEach((element) => element.classList.toggle('hidden', !user));
     $('#auth-button').classList.toggle('hidden', Boolean(user));
     $('#logout-button').classList.toggle('hidden', !user);
-    $('#hidden-filter-wrap').classList.toggle('hidden', !isOwner);
-    if (user && !isOwner) announce('ログイン中ですが、このアカウントには編集権限がありません。');
-    if (user && isOwner) setSyncState('オーナーとしてログイン中', 'ok');
+    $('#hidden-filter-wrap').classList.toggle('hidden', !user);
+    updateListTitle();
+    if (user) setSyncState(isOwner ? 'オーナーとしてログイン中' : 'マイリストにログイン中', 'ok');
     render();
   }
 
@@ -211,8 +221,14 @@
       const result = await supabase.auth.getSession();
       user = result.data.session ? result.data.session.user : null;
       supabase.auth.onAuthStateChange((_event, session) => {
-        user = session ? session.user : null;
+        const nextUser = session ? session.user : null;
+        if ((user && user.id) === (nextUser && nextUser.id)) {
+          if (nextUser) user = nextUser;
+          return;
+        }
+        user = nextUser;
         updateAccessUi();
+        void loadSongsForCurrentUser();
       });
       updateAccessUi();
     } catch (error) {
@@ -221,31 +237,75 @@
     }
   }
 
-  async function loadSongs() {
-    const stored = localStorage.getItem(storageKey);
+  async function loadPublicSongs() {
     const dataUrl = config.songsDataUrl || './data/songs.json';
+    const response = await fetch(dataUrl + (dataUrl.includes('?') ? '&' : '?') + 'v=' + Date.now(), { cache: 'no-store' });
+    if (!response.ok) throw new Error('公開リストを取得できませんでした');
+    const data = await response.json();
+    return Array.isArray(data) ? data.map(normalizeSong) : [];
+  }
+
+  function publicSongSnapshot(list) {
+    return list.map((song) => ({ ...song, notes: '' }));
+  }
+
+  async function syncPublicList(list) {
+    return supabase.functions.invoke(config.syncFunctionName || 'songlist-github-sync', {
+      body: { songs: publicSongSnapshot(list) }
+    });
+  }
+
+  async function loadSongsForCurrentUser() {
+    const generation = ++loadGeneration;
+    const account = user;
     try {
-      const response = await fetch(dataUrl + (dataUrl.includes('?') ? '&' : '?') + 'v=' + Date.now(), { cache: 'no-store' });
-      if (!response.ok) throw new Error('一覧データを取得できませんでした');
-      songs = await response.json();
-      if (stored && !config.songsDataUrl) {
+      if (account && supabase) {
+        setSyncState('個人リストを読み込み中', 'warn');
+        let { data, error } = await supabase.from('song_lists').select('songs').eq('user_id', account.id).maybeSingle();
+        if (error) throw error;
+        if (!data && account.id === config.adminUserId) {
+          const originalSongs = await loadPublicSongs();
+          const seed = await supabase.from('song_lists').upsert({ user_id: account.id, songs: originalSongs }, { onConflict: 'user_id' }).select('songs').single();
+          if (seed.error) throw seed.error;
+          data = seed.data;
+          if (config.githubSyncReady) {
+            try {
+              const publicSync = await syncPublicList(originalSongs);
+              if (publicSync.error) {
+                console.error('Public list privacy sync failed', publicSync.error);
+                announce('個人リストへ既存データを引き継ぎました。公開一覧の更新は次回の保存時に行います。');
+              }
+            } catch (syncError) {
+              console.error('Public list privacy sync failed', syncError);
+              announce('個人リストへ既存データを引き継ぎました。公開一覧の更新は次回の保存時に行います。');
+            }
+          }
+        }
+        if (generation !== loadGeneration) return;
+        songs = Array.isArray(data?.songs) ? data.songs.map(normalizeSong) : [];
+        setSyncState(data ? '個人リストを読み込みました' : '新しい個人リストです', 'ok');
+      } else {
         try {
-          const draft = JSON.parse(stored);
-          if (Array.isArray(draft) && draft.length) songs = draft;
-        } catch (_) { localStorage.removeItem(storageKey); }
+          songs = await loadPublicSongs();
+          setSyncState('公開リストを読み込みました', 'ok');
+        } catch (error) {
+          console.error('Public song list could not be loaded', error);
+          songs = Array.isArray(window.SONGLIST_INITIAL_SONGS) ? window.SONGLIST_INITIAL_SONGS.map(normalizeSong) : [];
+          setSyncState(songs.length ? '同梱リストを表示中' : '一覧データを読み込めません', 'warn');
+          if (!songs.length) announce('曲リストを読み込めませんでした。');
+        }
       }
-      setSyncState('公開リストを読み込みました', 'ok');
     } catch (error) {
-      console.error('Song data could not be loaded', error);
-      try {
-      songs = stored ? JSON.parse(stored) : (Array.isArray(window.SONGLIST_INITIAL_SONGS) ? window.SONGLIST_INITIAL_SONGS : []);
-      } catch (_) { songs = []; }
-      setSyncState(songs.length ? '保存済みのリストを表示中' : '一覧データを読み込めません', 'warn');
-      if (!songs.length) announce('曲リストを読み込めませんでした。GitHub PagesなどのWebサーバーから開いてください。');
+      console.error('Song list could not be loaded', error);
+      if (generation !== loadGeneration) return;
+      songs = [];
+      setSyncState('個人リストの読み込みに失敗しました', 'warn');
+      announce('個人リストを読み込めませんでした。時間をおいて再度お試しください。');
     }
-    songs = songs.map(normalizeSong);
+    if (generation !== loadGeneration) return;
     if (config.adminUserId && config.supabaseUrl && config.supabaseAnonKey && config.githubSyncReady) $('#setup-notice').classList.add('hidden');
     else $('#setup-notice').classList.remove('hidden');
+    updateListTitle();
     render();
   }
 
@@ -268,22 +328,31 @@
 
   async function persistSongs() {
     const snapshot = JSON.stringify(songs);
+    const accountId = user && user.id;
+    const accountIsOwner = isOwner;
+    if (!accountId || !supabase) {
+      announce('保存するにはログインしてください。');
+      return Promise.reject(new Error('An authenticated account is required to save a song list.'));
+    }
     writeChain = writeChain.catch(() => undefined).then(async () => {
-      if (isOwner && supabase && config.adminUserId) {
-        setSyncState('GitHubに保存しています', 'warn');
-        const { error } = await supabase.functions.invoke(config.syncFunctionName || 'songlist-github-sync', { body: { songs: JSON.parse(snapshot) } });
-        if (error) throw error;
-        localStorage.removeItem(storageKey);
-        setSyncState('GitHubに保存しました', 'ok');
-      } else {
-        localStorage.setItem(storageKey, snapshot);
-        setSyncState('このブラウザーに保存しました', 'warn');
+      setSyncState('個人リストに保存しています', 'warn');
+      const { error } = await supabase.from('song_lists').upsert({ user_id: accountId, songs: JSON.parse(snapshot) }, { onConflict: 'user_id' });
+      if (error) throw error;
+      if (accountIsOwner && config.githubSyncReady) {
+        setSyncState('個人リストを保存・公開一覧を更新中', 'warn');
+        const result = await syncPublicList(JSON.parse(snapshot));
+        if (result.error) {
+          console.error('Public GitHub list could not be updated', result.error);
+          setSyncState('個人リストに保存済み・公開同期は未完了', 'warn');
+          announce('個人リストは保存しましたが、公開一覧の更新に失敗しました。');
+          return;
+        }
       }
+      setSyncState('個人リストに保存しました', 'ok');
     }).catch((error) => {
       console.error('Song list could not be saved', error);
-      localStorage.setItem(storageKey, snapshot);
-      setSyncState('保存に失敗・端末に一時保存', 'warn');
-      announce('GitHubへの保存に失敗しました。接続設定を確認してください。');
+      setSyncState('Supabaseへの保存に失敗しました', 'warn');
+      announce('保存に失敗しました。接続設定を確認して再度お試しください。');
       throw error;
     });
     return writeChain;
@@ -387,8 +456,13 @@
     }
     const email = $('#auth-email').value.trim();
     const password = $('#auth-password').value;
+    const displayName = $('#auth-display-name').value.trim();
+    if (signUp && !displayName) {
+      showError($('#auth-error'), 'ユーザー名を入力してください。');
+      return;
+    }
     const result = signUp
-      ? await supabase.auth.signUp({ email, password })
+      ? await supabase.auth.signUp({ email, password, options: { data: { full_name: displayName } } })
       : await supabase.auth.signInWithPassword({ email, password });
     if (result.error) {
       showError($('#auth-error'), result.error.message);
@@ -400,9 +474,18 @@
       return;
     }
     user = result.data.user || (result.data.session && result.data.session.user);
+    if (!signUp && user && displayName && displayName !== userDisplayName()) {
+      const updated = await supabase.auth.updateUser({ data: { full_name: displayName } });
+      if (updated.error) {
+        showError($('#auth-error'), 'ログインしましたが、表示名を保存できませんでした: ' + updated.error.message);
+        return;
+      }
+      user = updated.data.user;
+    }
     updateAccessUi();
+    await loadSongsForCurrentUser();
     $('#auth-dialog').close();
-    announce(isOwner ? 'オーナーとしてログインしました。' : 'ログインしました。編集にはオーナー権限が必要です。');
+    announce('ログインしました。自分専用のリストを利用できます。');
   }
 
   function csvCell(value) {
@@ -558,7 +641,7 @@
     isOwner = false;
     $('#show-hidden').checked = false;
     updateAccessUi();
-    setSyncState('公開リストを表示中', 'ok');
+    await loadSongsForCurrentUser();
   }
 
   function applyUrlFilters() {
@@ -609,10 +692,9 @@
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); $('#search-input').focus(); }
       if (event.key === 'Escape') document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
     });
-    await loadSongs();
     applyUrlFilters();
-    render();
     await initializeAuth();
+    await loadSongsForCurrentUser();
   }
 
   start();

@@ -22,6 +22,7 @@
     <div class="top-actions">
       <span id="sync-status" class="sync-status" aria-live="polite"><span class="status-dot"></span><span id="sync-label">認証を確認中</span></span>
       <button id="auth-button" class="button button-soft hidden" type="button">自分のリストを作る</button>
+      <button id="account-settings-button" class="button button-soft hidden user-only" type="button">アカウント設定</button>
       <button id="logout-button" class="button button-soft hidden" type="button">ログアウト</button>
     </div>
   </header>
@@ -33,7 +34,6 @@
       <h1 id="auth-heading">自分だけの<br><span>ソングリストを。</span></h1>
       <p id="auth-intro" class="auth-description">アカウントを作成して、歌いたい曲やキーを自分専用のリストに保存しましょう。</p>
       <form id="auth-form" class="auth-gate-form" novalidate>
-        <label id="display-name-field" class="field"><span>ユーザー名</span><input id="auth-display-name" type="text" maxlength="60" autocomplete="nickname" placeholder="例：ゆう"></label>
         <label class="field"><span>メールアドレス</span><input id="auth-email" type="email" required autocomplete="email" placeholder="you@example.com"></label>
         <label class="field"><span>パスワード</span><input id="auth-password" type="password" required minlength="6" autocomplete="new-password" placeholder="6文字以上"></label>
         <div id="auth-error" class="form-error hidden" role="alert"></div>
@@ -47,20 +47,6 @@
   </main>
 
   <main id="app-shell" class="page-shell hidden">
-    <section class="hero" aria-labelledby="page-title">
-      <div class="hero-copy">
-        <p class="eyebrow"><span class="eyebrow-line"></span> YOUR PERSONAL SONGBOOK</p>
-        <h1 id="page-title">歌いたい曲を、<br><span>いつでも心地よく。</span></h1>
-        <p class="hero-note">キーも、気をつけるポイントも。自分だけの歌リストをひとつに。</p>
-      </div>
-      <div class="hero-art" aria-hidden="true">
-        <div class="sound-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <span class="art-note note-one">♪</span><span class="art-note note-two">♫</span>
-        <div class="art-disc"><div class="disc-hole"></div></div>
-        <div class="art-leaf leaf-one"></div><div class="art-leaf leaf-two"></div>
-      </div>
-    </section>
-
     <section class="overview" aria-label="登録数">
       <div class="stat-card stat-primary">
         <div class="stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM20 8v6m3-3h-6"/></svg></div>
@@ -84,7 +70,7 @@
 
     <section class="list-panel" aria-labelledby="list-title">
       <div class="panel-heading">
-        <div><p class="eyebrow panel-eyebrow">YOUR LIBRARY</p><h2 id="list-title">マイソングリスト</h2></div>
+        <div><p class="eyebrow panel-eyebrow">YOUR LIBRARY</p><div class="list-title-row"><h2 id="list-title">マイソングリスト</h2><button id="edit-display-name-button" class="button button-outline user-only hidden" type="button">編集</button></div></div>
         <div class="panel-actions">
           <button id="import-button" class="button button-outline user-only hidden" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>CSVを取り込む</button>
           <input id="import-file" class="hidden" type="file" accept=".csv,text/csv">
@@ -139,6 +125,34 @@
       <div id="import-error" class="form-error hidden" role="alert"></div>
       <div class="modal-actions"><button class="button button-outline" type="button" data-close="import-dialog">キャンセル</button><button class="button button-green" type="submit">取り込む</button></div>
     </form>
+  </dialog>
+
+  <dialog id="profile-dialog" class="modal">
+    <form id="profile-form">
+      <div class="modal-heading"><div><p class="eyebrow">PROFILE</p><h2>表示名を編集</h2></div><button class="icon-button" type="button" data-close="profile-dialog" aria-label="閉じる">×</button></div>
+      <p class="auth-description">閲覧用リンクにも、この表示名が表示されます。</p>
+      <label class="field"><span>表示名</span><input id="profile-display-name" type="text" required maxlength="60" autocomplete="nickname"></label>
+      <div id="profile-error" class="form-error hidden" role="alert"></div>
+      <div class="modal-actions"><button class="button button-outline" type="button" data-close="profile-dialog">キャンセル</button><button class="button button-green" type="submit">保存する</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="account-settings-dialog" class="modal">
+    <form id="password-form">
+      <div class="modal-heading"><div><p class="eyebrow">ACCOUNT</p><h2>アカウント設定</h2></div><button class="icon-button" type="button" data-close="account-settings-dialog" aria-label="閉じる">×</button></div>
+      <p class="auth-description">パスワードを変更できます。変更後も現在のアカウントでログインしたままです。</p>
+      <label class="field"><span>新しいパスワード</span><input id="new-password" type="password" required minlength="6" autocomplete="new-password" placeholder="6文字以上"></label>
+      <label class="field settings-field"><span>新しいパスワード（確認）</span><input id="confirm-password" type="password" required minlength="6" autocomplete="new-password"></label>
+      <div id="password-error" class="form-error hidden" role="alert"></div>
+      <div id="password-message" class="auth-message hidden" role="status"></div>
+      <div class="modal-actions"><button class="button button-green" type="submit">パスワードを変更</button></div>
+    </form>
+    <div class="account-delete-section">
+      <h3>アカウントを削除</h3>
+      <p>アカウントと、このアカウントの曲リスト・閲覧用リンクを削除します。この操作は取り消せません。</p>
+      <button id="delete-account-button" class="button button-danger" type="button">アカウントを削除</button>
+      <div id="delete-account-error" class="form-error hidden" role="alert"></div>
+    </div>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

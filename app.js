@@ -172,15 +172,17 @@
       : '';
     const searchCell = '<td class="search-cell"><div class="row-actions search-actions">' + chordSearch + '</div></td>';
     const actionCell = personalView() ? '<td><div class="row-actions">' + adminActions + '</div></td>' : '';
-    const sungKeyLabel = (key || '—') + ' (' + signed(song.transpose) + ')';
+    const transposeLabel = '(' + signed(song.transpose) + ')';
     const quickKey = personalView()
-      ? '<span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><button class="key-nudge" type="button" data-action="transpose" data-delta="-1" data-id="' + escapeHtml(song.id) + '" aria-label="半音下げる">−</button><span class="key-chip" title="自分が歌うキー（原曲からの移調）">' + escapeHtml(sungKeyLabel) + '</span><button class="key-nudge" type="button" data-action="transpose" data-delta="1" data-id="' + escapeHtml(song.id) + '" aria-label="半音上げる">＋</button><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>'
-      : '<span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><span class="key-chip" title="自分が歌うキー（原曲からの移調）">' + escapeHtml(sungKeyLabel) + '</span><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>';
+      ? '<span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><button class="key-nudge" type="button" data-action="transpose" data-delta="-1" data-id="' + escapeHtml(song.id) + '" aria-label="半音下げる">−</button><span class="transpose-label">' + escapeHtml(transposeLabel) + '</span><span class="key-chip" title="自分が歌うキー">' + escapeHtml(key || '—') + '</span><button class="key-nudge" type="button" data-action="transpose" data-delta="1" data-id="' + escapeHtml(song.id) + '" aria-label="半音上げる">＋</button><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>'
+      : '<span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><span class="transpose-label">' + escapeHtml(transposeLabel) + '</span><span class="key-chip" title="自分が歌うキー">' + escapeHtml(key || '—') + '</span><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>';
     const hiddenMark = song.visible ? '' : '<span class="hidden-pill">非表示</span>';
     const notesCell = personalView() ? '<td><div class="note-cell" title="' + escapeHtml(song.notes || '') + '"><span>' + escapeHtml(song.notes || '—') + '</span></div></td>' : '';
+    const artistReading = personalView() ? '<div class="cell-scroll reading-scroll" title="アーティスト名の読み仮名"><span class="artist-reading">' + escapeHtml(song.artistKana) + '</span></div>' : '';
+    const songReading = personalView() ? '<div class="cell-scroll reading-scroll" title="曲名の読み仮名"><span class="song-reading">' + escapeHtml(song.songKana) + '</span></div>' : '';
     return '<tr class="' + (song.visible ? '' : 'is-hidden-song') + '">' +
-      '<td><div class="artist-cell"><div class="cell-scroll"><span class="artist-name" title="' + escapeHtml(song.artist) + '">' + escapeHtml(song.artist) + hiddenMark + '</span></div><div class="cell-scroll reading-scroll" title="アーティスト名の読み仮名"><span class="artist-reading">' + escapeHtml(song.artistKana) + '</span></div></div></td>' +
-      '<td><div class="song-cell"><div class="cell-scroll"><span class="song-name" title="' + escapeHtml(song.title) + '">' + escapeHtml(song.title) + '</span></div><div class="cell-scroll reading-scroll" title="曲名の読み仮名"><span class="song-reading">' + escapeHtml(song.songKana) + '</span></div></div></td>' +
+      '<td><div class="artist-cell"><div class="cell-scroll"><span class="artist-name" title="' + escapeHtml(song.artist) + '">' + escapeHtml(song.artist) + hiddenMark + '</span></div>' + artistReading + '</div></td>' +
+      '<td><div class="song-cell"><div class="cell-scroll"><span class="song-name" title="' + escapeHtml(song.title) + '">' + escapeHtml(song.title) + '</span></div>' + songReading + '</div></td>' +
       '<td><div class="key-cell">' + quickKey + '</div></td>' +
       searchCell +
       '<td><div class="cell-scroll date-scroll"><span class="date-cell ' + (song.lastSung ? 'date-recorded' : 'date-empty') + '">' + escapeHtml(formatDate(song.lastSung)) + '</span></div></td>' +
@@ -207,7 +209,7 @@
     const notesHead = canEdit ? '<th scope="col">備考</th>' : '';
     const notesCol = canEdit ? '<col class="notes">' : '';
     const listType = canEdit ? ' owner-list' : ' public-list';
-    $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">原曲 → 歌うキー（移調） / 平行調</th><th class="search-heading" scope="col" title="Chordwikiで検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + list.map(songRow).join('') + '</tbody></table>';
+    $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">原曲 → （移調） 歌うキー / 平行調</th><th class="search-heading" scope="col" title="Chordwikiで検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + list.map(songRow).join('') + '</tbody></table>';
   }
 
   function updateAccessUi() {
@@ -217,6 +219,7 @@
     document.querySelectorAll('.user-only').forEach((element) => element.classList.toggle('hidden', !personalView()));
     $('#auth-button').classList.toggle('hidden', !sharedListMode);
     $('#logout-button').classList.toggle('hidden', !personalView());
+    $('#account-settings-button').classList.toggle('hidden', !personalView());
     $('#hidden-filter-wrap').classList.toggle('hidden', !personalView());
     $('.overview-share').classList.toggle('hidden', !personalView());
     updateListTitle();
@@ -253,9 +256,7 @@
   function publicSongSnapshot(list) {
     return list.filter((song) => song.visible).map((song) => ({
       id: song.id,
-      artistKana: song.artistKana,
       artist: song.artist,
-      songKana: song.songKana,
       title: song.title,
       key: song.key,
       transpose: song.transpose,
@@ -466,8 +467,6 @@
     $('#auth-intro').textContent = isSignup
       ? 'アカウントを作成して、歌いたい曲やキーを自分専用のリストに保存しましょう。'
       : 'ログインすると、あなた専用のソングリストを開けます。';
-    $('#display-name-field').classList.toggle('hidden', !isSignup);
-    $('#auth-display-name').required = isSignup;
     $('#auth-password').autocomplete = isSignup ? 'new-password' : 'current-password';
     $('#auth-submit-button').textContent = isSignup ? '無料で新規登録' : 'ログイン';
     $('#auth-switch-prompt').textContent = isSignup ? 'すでにアカウントをお持ちですか？' : '初めてご利用ですか？';
@@ -487,36 +486,87 @@
     }
     const email = $('#auth-email').value.trim();
     const password = $('#auth-password').value;
-    const displayName = $('#auth-display-name').value.trim();
     if (!$('#auth-form').reportValidity()) return;
-    if (signUp && !displayName) {
-      showError($('#auth-error'), 'ユーザー名を入力してください。');
-      return;
-    }
     const result = signUp
-      ? await supabase.auth.signUp({ email, password, options: { data: { full_name: displayName } } })
+      ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: new URL(window.location.pathname, window.location.origin).toString() } })
       : await supabase.auth.signInWithPassword({ email, password });
     if (result.error) {
       showError($('#auth-error'), result.error.message);
       return;
     }
     if (signUp && !result.data.session) {
-      $('#auth-message').textContent = '確認メールを送信しました。メールのリンクを開いて登録を完了してください。';
+      $('#auth-message').textContent = '確認メールを送信しました。メール内のリンクを開いて登録を完了したあと、ここからログインしてください。届かない場合は迷惑メールとSupabaseのメール送信設定をご確認ください。';
       $('#auth-message').classList.remove('hidden');
       return;
     }
     user = result.data.user || (result.data.session && result.data.session.user);
-    if (!signUp && user && displayName && displayName !== userDisplayName()) {
-      const updated = await supabase.auth.updateUser({ data: { full_name: displayName } });
-      if (updated.error) {
-        showError($('#auth-error'), 'ログインしましたが、表示名を保存できませんでした: ' + updated.error.message);
-        return;
-      }
-      user = updated.data.user;
-    }
     updateAccessUi();
     await loadSongsForCurrentUser();
-    announce(signUp ? 'アカウントを作成しました。自分のリストをご利用いただけます。' : 'ログインしました。自分専用のリストを表示しています。');
+    announce('ログインしました。自分専用のリストを表示しています。');
+  }
+
+  function openProfileDialog() {
+    $('#profile-display-name').value = userDisplayName();
+    $('#profile-error').classList.add('hidden');
+    $('#profile-dialog').showModal();
+    $('#profile-display-name').focus();
+  }
+
+  async function saveProfile(event) {
+    event.preventDefault();
+    const name = $('#profile-display-name').value.trim();
+    if (!name || !user || !supabase) return;
+    const result = await supabase.auth.updateUser({ data: { full_name: name } });
+    if (result.error) {
+      showError($('#profile-error'), '表示名を保存できませんでした。時間をおいて再度お試しください。');
+      return;
+    }
+    user = result.data.user;
+    updateListTitle();
+    $('#profile-dialog').close();
+    try { await syncUserShare(songs, false); } catch (error) { console.error('Shared display name could not be updated', error); }
+    announce('表示名を更新しました。');
+  }
+
+  async function changePassword(event) {
+    event.preventDefault();
+    $('#password-error').classList.add('hidden');
+    $('#password-message').classList.add('hidden');
+    const password = $('#new-password').value;
+    if (password !== $('#confirm-password').value) {
+      showError($('#password-error'), '確認用パスワードが一致しません。');
+      return;
+    }
+    const result = await supabase.auth.updateUser({ password });
+    if (result.error) {
+      showError($('#password-error'), 'パスワードを変更できませんでした。時間をおいて再度お試しください。');
+      return;
+    }
+    $('#password-form').reset();
+    $('#password-message').textContent = 'パスワードを変更しました。';
+    $('#password-message').classList.remove('hidden');
+  }
+
+  async function deleteAccount() {
+    if (!user || !supabase) return;
+    const confirmation = 'アカウントと曲リストを削除します。元に戻せません。続けますか？';
+    if (!window.confirm(confirmation)) return;
+    $('#delete-account-error').classList.add('hidden');
+    $('#delete-account-button').disabled = true;
+    $('#delete-account-button').textContent = '削除しています…';
+    const { error } = await supabase.functions.invoke('delete-songlist-account', { method: 'POST' });
+    $('#delete-account-button').disabled = false;
+    $('#delete-account-button').textContent = 'アカウントを削除';
+    if (error) {
+      showError($('#delete-account-error'), 'アカウントを削除できませんでした。管理者にお問い合わせください。');
+      return;
+    }
+    try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) { /* The account was already removed. */ }
+    user = null;
+    songs = [];
+    $('#account-settings-dialog').close();
+    updateAccessUi();
+    announce('アカウントを削除しました。');
   }
 
   function csvCell(value) {
@@ -701,6 +751,17 @@
     $('#song-title').addEventListener('input', () => { const reading = inferReadingFromName($('#song-title').value); if (reading && !$('#song-reading').value) $('#song-reading').value = reading; });
     $('#auth-button').addEventListener('click', () => { window.location.href = window.location.pathname; });
     $('#logout-button').addEventListener('click', signOut);
+    $('#account-settings-button').addEventListener('click', () => {
+      $('#password-form').reset();
+      $('#password-error').classList.add('hidden');
+      $('#password-message').classList.add('hidden');
+      $('#delete-account-error').classList.add('hidden');
+      $('#account-settings-dialog').showModal();
+    });
+    $('#edit-display-name-button').addEventListener('click', openProfileDialog);
+    $('#profile-form').addEventListener('submit', saveProfile);
+    $('#password-form').addEventListener('submit', changePassword);
+    $('#delete-account-button').addEventListener('click', deleteAccount);
     $('#auth-form').addEventListener('submit', (event) => authSubmit(event));
     $('#auth-mode-toggle').addEventListener('click', () => setAuthMode(authMode === 'signup' ? 'login' : 'signup'));
     $('#export-button').addEventListener('click', exportCsv);

@@ -77,7 +77,6 @@
       <div class="toolbar">
         <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="search-input" type="search" placeholder="アーティスト名・曲名で検索" autocomplete="off"><kbd>⌘ K</kbd></label>
         <div class="toolbar-filters">
-          <label class="select-wrap"><span class="sr-only">曲調で絞り込む</span><select id="genre-filter"><option value="">すべての曲調</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></label>
           <label class="select-wrap"><span class="sr-only">並び順</span><select id="sort-mode"><option value="artist">アーティスト順</option><option value="title">曲名順</option><option value="recent">最後に歌った順</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></label>
           <label id="hidden-filter-wrap" class="check-filter hidden"><input id="show-hidden" type="checkbox"><span class="checkmark"></span>非表示も見る</label>
         </div>
@@ -104,7 +103,6 @@
         <label class="field"><span>原曲キー</span><select id="song-key"></select></label>
         <label class="field"><span>自分が歌うキー <small class="inline-hint">原曲からの移調</small></span><div class="transpose-control"><button type="button" class="step-button" id="transpose-down" aria-label="半音下げる">−</button><output id="transpose-output">0</output><button type="button" class="step-button" id="transpose-up" aria-label="半音上げる">＋</button><input id="transpose-value" type="hidden" value="0"></div></label>
         <div class="field key-preview-field"><span>歌うキー / 平行調</span><div id="key-preview" class="key-preview"><span class="key-chip">—</span><span class="parallel-link">→</span><span class="parallel-chip">—</span></div></div>
-        <label class="field"><span>曲調</span><select id="song-genre"></select></label>
         <label class="field"><span>最後に歌った日</span><input id="last-sung" type="date"></label>
         <label class="field field-wide"><span>備考</span><textarea id="song-notes" rows="3" maxlength="1200" placeholder="気をつけるポイント、転調など"></textarea></label>
         <label class="visibility-toggle"><input id="song-visible" type="checkbox" checked><span class="toggle-track"><i></i></span><span><strong>一覧に表示する</strong><small>オフにすると一般公開リストから隠れます</small></span></label>

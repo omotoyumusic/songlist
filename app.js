@@ -3,7 +3,6 @@
   const config = window.SONGLIST_CONFIG || {};
   const hiragana = Array.from('あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽゔ');
   const keys = ['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B', 'Cm', 'C#m', 'Dbm', 'Dm', 'D#m', 'Ebm', 'Em', 'Fm', 'F#m', 'Gbm', 'Gm', 'G#m', 'Abm', 'Am', 'A#m', 'Bbm', 'Bm'];
-  const genres = ['しっとり', '普通', '盛り上がる', '切ない', '明るい', 'かっこいい', 'おしゃれ', '穏やか', '楽しい', '力強い', 'その他'];
   const pitchByName = { C: 0, 'B#': 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, Fb: 4, 'E#': 5, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11, Cb: 11 };
   const sharpNotes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const flatNotes = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -43,13 +42,6 @@
   function fillKeySelect(select, selected) {
     select.innerHTML = '<option value="">未設定</option>' + keys.map((key) => '<option value="' + key + '">' + key + '</option>').join('');
     if (keys.includes(selected)) select.value = selected;
-  }
-
-  function fillGenreSelect(select, selected, includeAll) {
-    const first = includeAll ? '<option value="">すべての曲調</option>' : '<option value="">未設定</option>';
-    const values = Array.from(new Set(genres.concat(songs.map((song) => song.genre).filter(Boolean))));
-    select.innerHTML = first + values.map((genre) => '<option value="' + escapeHtml(genre) + '">' + escapeHtml(genre) + '</option>').join('');
-    if (selected && values.includes(selected)) select.value = selected;
   }
 
   function keyInfo(key) {
@@ -135,13 +127,13 @@
 
   function filteredSongs() {
     const query = $('#search-input').value.trim().toLocaleLowerCase('ja');
-    const genre = $('#genre-filter').value;
     const showHidden = isOwner && $('#show-hidden').checked;
     const list = songs.filter((song) => {
       if (!song.visible && !showHidden) return false;
-      if (genre && song.genre !== genre) return false;
       if (!query) return true;
-      return [song.artist, song.artistKana, song.title, song.songKana, song.notes, song.genre, song.key, sungKey(song)].some((value) => String(value || '').toLocaleLowerCase('ja').includes(query));
+      const searchable = [song.artist, song.artistKana, song.title, song.songKana, song.key, sungKey(song)];
+      if (user) searchable.push(song.notes);
+      return searchable.some((value) => String(value || '').toLocaleLowerCase('ja').includes(query));
     });
     return sortSongs(list);
   }
@@ -167,16 +159,15 @@
     const quickKey = isOwner
       ? '<span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><button class="key-nudge" type="button" data-action="transpose" data-delta="-1" data-id="' + escapeHtml(song.id) + '" aria-label="半音下げる">−</button><span class="key-chip" title="自分が歌うキー（原曲からの移調）">' + escapeHtml(sungKeyLabel) + '</span><button class="key-nudge" type="button" data-action="transpose" data-delta="1" data-id="' + escapeHtml(song.id) + '" aria-label="半音上げる">＋</button><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>'
       : '<span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><span class="key-chip" title="自分が歌うキー（原曲からの移調）">' + escapeHtml(sungKeyLabel) + '</span><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>';
-    const genreClass = song.genre === '盛り上がる' ? ' mood-lively' : song.genre === 'しっとり' ? ' mood-calm' : '';
     const hiddenMark = song.visible ? '' : '<span class="hidden-pill">非表示</span>';
+    const notesCell = user ? '<td><div class="note-cell" title="' + escapeHtml(song.notes || '') + '"><span>' + escapeHtml(song.notes || '—') + '</span></div></td>' : '';
     return '<tr class="' + (song.visible ? '' : 'is-hidden-song') + '">' +
       '<td><div class="artist-cell"><div class="cell-scroll"><span class="artist-name" title="' + escapeHtml(song.artist) + '">' + escapeHtml(song.artist) + hiddenMark + '</span></div><div class="cell-scroll reading-scroll" title="アーティスト名の読み仮名"><span class="artist-reading">' + escapeHtml(song.artistKana) + '</span></div></div></td>' +
       '<td><div class="song-cell"><div class="cell-scroll"><span class="song-name" title="' + escapeHtml(song.title) + '">' + escapeHtml(song.title) + '</span></div><div class="cell-scroll reading-scroll" title="曲名の読み仮名"><span class="song-reading">' + escapeHtml(song.songKana) + '</span></div></div></td>' +
       '<td><div class="key-cell">' + quickKey + '</div></td>' +
       searchCell +
-      '<td><div class="cell-scroll genre-scroll">' + (song.genre ? '<span class="genre-pill' + genreClass + '">' + escapeHtml(song.genre) + '</span>' : '<span class="base-key">—</span>') + '</div></td>' +
       '<td><div class="cell-scroll date-scroll"><span class="date-cell ' + (song.lastSung ? 'date-recorded' : 'date-empty') + '">' + escapeHtml(formatDate(song.lastSung)) + '</span></div></td>' +
-      '<td><div class="note-cell" title="' + escapeHtml(song.notes || '') + '"><span>' + escapeHtml(song.notes || '—') + '</span></div></td>' + actionCell + '</tr>';
+      notesCell + actionCell + '</tr>';
   }
 
   function render() {
@@ -185,7 +176,7 @@
     const artistCount = new Set(countScope.map((song) => song.artist)).size;
     $('#artist-count').textContent = artistCount.toLocaleString('ja-JP');
     $('#song-count').textContent = countScope.length.toLocaleString('ja-JP');
-    const isFiltered = Boolean($('#search-input').value.trim() || $('#genre-filter').value);
+    const isFiltered = Boolean($('#search-input').value.trim());
     $('#result-count').textContent = isFiltered ? '検索結果 ' + list.length.toLocaleString('ja-JP') + ' 曲' : '全 ' + list.length.toLocaleString('ja-JP') + ' 曲';
     $('.sort-note').innerHTML = '<span class="sort-symbol">↕</span> ' + ({ artist: 'アーティスト五十音順', title: '曲名五十音順', recent: '最後に歌った日順' }[$('#sort-mode').value] || 'アーティスト五十音順');
     $('#empty-state').classList.toggle('hidden', list.length > 0);
@@ -195,8 +186,10 @@
     }
     const actionHead = isOwner ? '<th scope="col">操作</th>' : '';
     const actionCol = isOwner ? '<col class="actions">' : '';
-    const actionWidths = isOwner ? ' owner-list' : ' public-list';
-    $('#song-list').innerHTML = '<table class="song-table' + actionWidths + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="genre"><col class="last"><col class="notes">' + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">原曲 → 歌うキー（移調） / 平行調</th><th class="search-heading" scope="col" title="Chordwikiで検索">検索</th><th scope="col">曲調</th><th scope="col">最後に歌った日</th><th scope="col">備考</th>' + actionHead + '</tr></thead><tbody>' + list.map(songRow).join('') + '</tbody></table>';
+    const notesHead = user ? '<th scope="col">備考</th>' : '';
+    const notesCol = user ? '<col class="notes">' : '';
+    const listType = isOwner ? ' owner-list' : user ? ' authenticated-list' : ' public-list';
+    $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">原曲 → 歌うキー（移調） / 平行調</th><th class="search-heading" scope="col" title="Chordwikiで検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + list.map(songRow).join('') + '</tbody></table>';
   }
 
   function updateAccessUi() {
@@ -251,7 +244,6 @@
       if (!songs.length) announce('曲リストを読み込めませんでした。GitHub PagesなどのWebサーバーから開いてください。');
     }
     songs = songs.map(normalizeSong);
-    fillGenreSelect($('#genre-filter'), '', true);
     if (config.adminUserId && config.supabaseUrl && config.supabaseAnonKey && config.githubSyncReady) $('#setup-notice').classList.add('hidden');
     else $('#setup-notice').classList.remove('hidden');
     render();
@@ -268,8 +260,6 @@
       key: String(song.key || ''),
       transpose: Math.max(-24, Math.min(24, Number(song.transpose || 0) || 0)),
       lastSung: String(song.lastSung || ''),
-      genre: String(song.genre || ''),
-      genreAlt: String(song.genreAlt || ''),
       notes: String(song.notes || ''),
       visible: song.visible !== false,
       extra: song.extra && typeof song.extra === 'object' ? song.extra : {}
@@ -310,7 +300,6 @@
     fillKeySelect($('#song-key'), editing ? song.key : '');
     $('#transpose-value').value = editing ? song.transpose : 0;
     updateTransposeOutput();
-    fillGenreSelect($('#song-genre'), editing ? song.genre : '', false);
     $('#last-sung').value = editing ? song.lastSung : '';
     $('#song-notes').value = editing ? song.notes : '';
     $('#song-visible').checked = editing ? song.visible : true;
@@ -340,7 +329,6 @@
       artistKana, artist, songKana: songKana || (previous && title === previous.title ? previous.songKana : ''), title,
       key: $('#song-key').value,
       transpose: $('#transpose-value').value,
-      genre: $('#song-genre').value,
       lastSung: $('#last-sung').value,
       notes: $('#song-notes').value.trim(),
       visible: $('#song-visible').checked,
@@ -423,8 +411,8 @@
   }
 
   function exportCsv() {
-    const headers = ['ID', 'アーティスト名の読み仮名', 'アーティスト名', '曲名の読み仮名', '曲名', '原曲キー', '自分が歌うキー（移調）', '曲調', '曲調補足', '最後に歌った日', '備考', '一覧に表示', '追加データ(JSON)'];
-    const rows = [headers, ...songs.map((song) => [song.id, song.artistKana, song.artist, song.songKana, song.title, song.key, song.transpose, song.genre, song.genreAlt, song.lastSung, song.notes, song.visible ? 'true' : 'false', JSON.stringify(song.extra || {})])];
+    const headers = ['ID', 'アーティスト名の読み仮名', 'アーティスト名', '曲名の読み仮名', '曲名', '原曲キー', '自分が歌うキー（移調）', '最後に歌った日', '備考', '一覧に表示', '追加データ(JSON)'];
+    const rows = [headers, ...songs.map((song) => [song.id, song.artistKana, song.artist, song.songKana, song.title, song.key, song.transpose, song.lastSung, song.notes, song.visible ? 'true' : 'false', JSON.stringify(song.extra || {})])];
     const content = '\uFEFF' + rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
     const anchor = document.createElement('a');
@@ -478,8 +466,6 @@
       title: columnIndex(header, ['曲名', 'title', 'song']),
       key: columnIndex(header, ['原曲キー', 'key']),
       transpose: columnIndex(header, ['自分が歌うキー（移調）', '自分が歌うキー', 'transpose']),
-      genre: columnIndex(header, ['曲調', 'genre']),
-      genreAlt: columnIndex(header, ['曲調補足', 'genreAlt']),
       lastSung: columnIndex(header, ['最後に歌った日', '最後に歌った', 'lastSung']),
       notes: columnIndex(header, ['備考', '転調など', 'notes']),
       visible: columnIndex(header, ['一覧に表示', 'visible']),
@@ -515,8 +501,6 @@
         artist, songKana: original ? getKanaInitial(title) : valueAt(row, 'songKana', getKanaInitial(title)), title,
         key: original ? cleanImportedCell(row[10]) : valueAt(row, 'key', ''),
         transpose: match ? Number(match[0]) : 0,
-        genre: original ? (cleanImportedCell(row[15]) || cleanImportedCell(row[16])) : valueAt(row, 'genre', ''),
-        genreAlt: original ? cleanImportedCell(row[16]) : valueAt(row, 'genreAlt', ''),
         lastSung: normalizedDate, notes: original ? cleanImportedCell(row[12]) : valueAt(row, 'notes', ''),
         visible: original ? true : valueAt(row, 'visible', 'true').toLowerCase() !== 'false', extra
       }, imported.length));
@@ -555,10 +539,9 @@
   async function handleShare() {
     const url = new URL(window.location.href);
     const query = $('#search-input').value.trim();
-    const genre = $('#genre-filter').value;
     const sort = $('#sort-mode').value;
     if (query) url.searchParams.set('q', query); else url.searchParams.delete('q');
-    if (genre) url.searchParams.set('genre', genre); else url.searchParams.delete('genre');
+    url.searchParams.delete('genre');
     if (sort !== 'artist') url.searchParams.set('sort', sort); else url.searchParams.delete('sort');
     url.searchParams.delete('showHidden');
     try {
@@ -581,13 +564,12 @@
   function applyUrlFilters() {
     const params = new URLSearchParams(window.location.search);
     $('#search-input').value = params.get('q') || '';
-    if (params.has('genre')) $('#genre-filter').value = params.get('genre');
+    params.delete('genre');
   }
 
   async function start() {
     $('#footer-year').textContent = String(new Date().getFullYear());
     fillKeySelect($('#song-key'), '');
-    fillGenreSelect($('#song-genre'), '', false);
     const params = new URLSearchParams(window.location.search);
     if (params.get('sort') === 'title' || params.get('sort') === 'recent') $('#sort-mode').value = params.get('sort');
     $('#add-button').addEventListener('click', () => openSongDialog(null));
@@ -619,7 +601,6 @@
     $('#import-form').addEventListener('submit', processImport);
     $('#share-button').addEventListener('click', handleShare);
     $('#search-input').addEventListener('input', render);
-    $('#genre-filter').addEventListener('change', render);
     $('#sort-mode').addEventListener('change', render);
     $('#show-hidden').addEventListener('change', render);
     document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => $('#' + button.dataset.close).close()));

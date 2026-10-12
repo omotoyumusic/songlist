@@ -1,0 +1,2 @@
+[functions.songlist-github-sync]
+verify_jwt = true

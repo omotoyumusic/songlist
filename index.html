@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#107c41">
+  <meta name="description" content="歌いたい曲と自分のキーを、見やすく整理できるソングリスト。">
+  <title>ソングリスト</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+  <script src="data/initial-songs.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="ソングリスト ホーム">
+      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+      <span>song<span class="brand-light">list</span></span>
+    </a>
+    <div class="top-actions">
+      <span id="sync-status" class="sync-status" aria-live="polite"><span class="status-dot"></span><span id="sync-label">一覧を読み込み中</span></span>
+      <button id="auth-button" class="button button-soft" type="button">ログイン</button>
+      <button id="logout-button" class="button button-soft hidden" type="button">ログアウト</button>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <section class="hero" aria-labelledby="page-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="eyebrow-line"></span> YOUR PERSONAL SONGBOOK</p>
+        <h1 id="page-title">歌いたい曲を、<br><span>いつでも心地よく。</span></h1>
+        <p class="hero-note">キーも、気をつけるポイントも。自分だけの歌リストをひとつに。</p>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="sound-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <span class="art-note note-one">♪</span><span class="art-note note-two">♫</span>
+        <div class="art-disc"><div class="disc-hole"></div></div>
+        <div class="art-leaf leaf-one"></div><div class="art-leaf leaf-two"></div>
+      </div>
+    </section>
+
+    <section class="overview" aria-label="登録数">
+      <div class="stat-card stat-primary">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM20 8v6m3-3h-6"/></svg></div>
+        <div><span class="stat-label">アーティスト</span><div class="stat-value"><strong id="artist-count">—</strong><span>組</span></div></div>
+        <span class="stat-caption">ARTISTS</span>
+      </div>
+      <div class="stat-card stat-songs">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13M9 18c0 1.66-1.57 3-3.5 3S2 19.66 2 18s1.57-3 3.5-3S9 16.34 9 18Zm12-2c0 1.66-1.57 3-3.5 3S14 17.66 14 16s1.57-3 3.5-3 3.5 1.34 3.5 3Z"/></svg></div>
+        <div><span class="stat-label">登録曲</span><div class="stat-value"><strong id="song-count">—</strong><span>曲</span></div></div>
+        <span class="stat-caption">SONGS</span>
+      </div>
+      <div class="overview-share">
+        <span class="share-caption">このリストをシェア</span>
+        <button id="share-button" class="button button-share" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>URLをコピー</span></button>
+      </div>
+    </section>
+
+    <section id="setup-notice" class="notice hidden" role="status">
+      <span class="notice-icon">i</span><span>初回設定が必要です。READMEの手順でSupabaseとGitHubを接続すると、編集内容を共有できます。</span>
+    </section>
+
+    <section class="list-panel" aria-labelledby="list-title">
+      <div class="panel-heading">
+        <div><p class="eyebrow panel-eyebrow">YOUR LIBRARY</p><h2 id="list-title">マイソングリスト</h2></div>
+        <div class="panel-actions">
+          <button id="import-button" class="button button-outline admin-only hidden" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>CSVを取り込む</button>
+          <input id="import-file" class="hidden" type="file" accept=".csv,text/csv">
+          <button id="export-button" class="button button-outline admin-only hidden" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>CSVを書き出す</button>
+          <button id="add-button" class="button button-green admin-only hidden" type="button"><span class="plus">＋</span>曲を追加</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="search-input" type="search" placeholder="アーティスト名・曲名で検索" autocomplete="off"><kbd>⌘ K</kbd></label>
+        <div class="toolbar-filters">
+          <label class="select-wrap"><span class="sr-only">曲調で絞り込む</span><select id="genre-filter"><option value="">すべての曲調</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></label>
+          <label class="select-wrap"><span class="sr-only">並び順</span><select id="sort-mode"><option value="artist">アーティスト順</option><option value="title">曲名順</option><option value="recent">最後に歌った順</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></label>
+          <label id="hidden-filter-wrap" class="check-filter hidden"><input id="show-hidden" type="checkbox"><span class="checkmark"></span>非表示も見る</label>
+        </div>
+      </div>
+
+      <div class="list-meta"><span id="result-count">曲を表示しています</span><span class="sort-note"><span class="sort-symbol">↕</span> 五十音順</span></div>
+      <div id="song-list" class="table-wrap"><div class="loading-state"><span class="loader"></span>リストを準備しています</div></div>
+      <div id="empty-state" class="empty-state hidden"><div class="empty-music">♪</div><strong>曲が見つかりませんでした</strong><p>検索キーワードや絞り込み条件を変えてみてください。</p></div>
+      <div class="panel-footer"><span class="footer-mark"><span></span></span><span>ひとつずつ、あなたの歌に。</span><span class="footer-sparkle">✳</span></div>
+    </section>
+
+    <footer class="page-footer"><span>SONGLIST <span id="footer-year"></span></span><span>声に、ちょうどいいキーを。</span></footer>
+  </main>
+
+  <dialog id="song-dialog" class="modal song-modal">
+    <form id="song-form" method="dialog">
+      <div class="modal-heading"><div><p class="eyebrow">SONG DETAILS</p><h2 id="song-dialog-title">曲を追加</h2></div><button class="icon-button" type="button" data-close="song-dialog" aria-label="閉じる">×</button></div>
+      <input id="song-id" type="hidden">
+      <div class="form-grid">
+        <label class="field"><span>アーティスト名の読み仮名 <em>*</em></span><input id="artist-reading" maxlength="120" placeholder="例：あいみょん"><small>五十音順に使います。既存の1文字だけの読みは、読み仮名全体に直してください</small></label>
+        <label class="field"><span>アーティスト名 <em>*</em></span><input id="artist-name" required maxlength="120" placeholder="例：あいみょん"></label>
+        <label class="field"><span>曲名の読み仮名 <em>*</em></span><input id="song-reading" maxlength="160" placeholder="例：まりーごーるど"><small>読み仮名を最初から最後まで入力してください</small></label>
+        <label class="field"><span>曲名 <em>*</em></span><input id="song-title" required maxlength="160" placeholder="例：マリーゴールド"></label>
+        <label class="field"><span>原曲キー</span><select id="song-key"></select></label>
+        <label class="field"><span>自分が歌うキー <small class="inline-hint">原曲からの移調</small></span><div class="transpose-control"><button type="button" class="step-button" id="transpose-down" aria-label="半音下げる">−</button><output id="transpose-output">0</output><button type="button" class="step-button" id="transpose-up" aria-label="半音上げる">＋</button><input id="transpose-value" type="hidden" value="0"></div></label>
+        <div class="field key-preview-field"><span>歌うキー / 平行調</span><div id="key-preview" class="key-preview"><span class="key-chip">—</span><span class="parallel-link">→</span><span class="parallel-chip">—</span></div></div>
+        <label class="field"><span>曲調</span><select id="song-genre"></select></label>
+        <label class="field"><span>最後に歌った日</span><input id="last-sung" type="date"></label>
+        <label class="field field-wide"><span>備考</span><textarea id="song-notes" rows="3" maxlength="1200" placeholder="気をつけるポイント、転調など"></textarea></label>
+        <label class="visibility-toggle"><input id="song-visible" type="checkbox" checked><span class="toggle-track"><i></i></span><span><strong>一覧に表示する</strong><small>オフにすると一般公開リストから隠れます</small></span></label>
+      </div>
+      <div id="form-error" class="form-error hidden" role="alert"></div>
+      <div class="modal-actions"><button class="button button-outline" type="button" data-close="song-dialog">キャンセル</button><button id="save-song-button" class="button button-green" type="submit">保存する</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="auth-dialog" class="modal auth-modal">
+    <form id="auth-form" method="dialog">
+      <div class="modal-heading"><div><p class="eyebrow">OWNER ACCESS</p><h2>オーナーログイン</h2></div><button class="icon-button" type="button" data-close="auth-dialog" aria-label="閉じる">×</button></div>
+      <p class="auth-description">登録したオーナーだけが、曲の追加・編集・削除を行えます。</p>
+      <label class="field"><span>メールアドレス</span><input id="auth-email" type="email" required autocomplete="email" placeholder="you@example.com"></label>
+      <label class="field"><span>パスワード</span><input id="auth-password" type="password" required minlength="6" autocomplete="current-password" placeholder="6文字以上"></label>
+      <div id="auth-error" class="form-error hidden" role="alert"></div>
+      <div id="auth-message" class="auth-message hidden" role="status"></div>
+      <div class="modal-actions auth-actions"><button id="signup-button" class="button button-outline" type="button">新規登録</button><button class="button button-green" type="submit">ログイン</button></div>
+      <p class="auth-footnote">アカウントを作成した後、READMEの手順でオーナー権限を設定してください。</p>
+    </form>
+  </dialog>
+
+  <dialog id="import-dialog" class="modal import-modal">
+    <form id="import-form" method="dialog">
+      <div class="modal-heading"><div><p class="eyebrow">CSV IMPORT</p><h2>CSVを取り込む</h2></div><button class="icon-button" type="button" data-close="import-dialog" aria-label="閉じる">×</button></div>
+      <p id="import-summary" class="auth-description"></p>
+      <label class="radio-option"><input type="radio" name="import-mode" value="merge" checked><span><strong>追加・更新する</strong><small>アーティスト名と曲名が一致する行を更新し、それ以外を追加します。</small></span></label>
+      <label class="radio-option"><input type="radio" name="import-mode" value="replace"><span><strong>すべて置き換える</strong><small>現在のリストをCSVの内容に置き換えます。</small></span></label>
+      <div id="import-error" class="form-error hidden" role="alert"></div>
+      <div class="modal-actions"><button class="button button-outline" type="button" data-close="import-dialog">キャンセル</button><button class="button button-green" type="submit">取り込む</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

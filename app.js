@@ -246,7 +246,14 @@
   }
 
   function publicSongSnapshot(list) {
-    return list.map((song) => ({ ...song, notes: '' }));
+    const privateFields = new Set(['notes', 'genre', 'genreAlt']);
+    const privateExtraFields = new Set(['tempo', 'content', 'voice', 'season']);
+    return list.map((song) => {
+      const publicSong = Object.fromEntries(Object.entries(song).filter(([key]) => !privateFields.has(key)));
+      const extra = { ...(song.extra || {}) };
+      privateExtraFields.forEach((key) => delete extra[key]);
+      return { ...publicSong, extra };
+    });
   }
 
   async function syncPublicList(list) {

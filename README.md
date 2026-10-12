@@ -21,7 +21,7 @@
 
 1. Supabaseプロジェクトを作成し、Authenticationのメール登録を有効にします。
 2. `Project URL` と公開用の `anon` / `publishable` keyを控えます。Secret keyやservice-role keyはブラウザーへ置かないでください。
-3. SupabaseのSQL Editorで [`supabase/migrations/20261012000000_user_song_lists.sql`](supabase/migrations/20261012000000_user_song_lists.sql) の内容を実行します。このテーブルはログイン中の本人だけが読み書きできるRLSポリシーを持ちます。
+3. SupabaseのSQL Editorで [`20261012000000_user_song_lists.sql`](20261012000000_user_song_lists.sql) の内容を実行します。このテーブルはログイン中の本人だけが読み書きできるRLSポリシーを持ちます。
 4. デプロイしたアプリで「ログイン」→「新規登録」を行い、ユーザー名・メールアドレス・パスワードを登録します。確認メールが届く設定ならメール内のリンクを開きます。
 5. SupabaseのAuthentication → Usersから、現在のオーナーアカウントのUUIDを確認します。
 6. `config.js` の `supabaseUrl`、`supabaseAnonKey`、`adminUserId`を設定してGitHubへ反映します。

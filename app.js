@@ -264,7 +264,9 @@
     return visibleSongs.map((song) => ({
       id: song.id,
       artist: song.artist,
+      artistKana: song.artistKana,
       title: song.title,
+      songKana: song.songKana,
       artistSortIndex: artistOrder.get(song.id),
       titleSortIndex: titleOrder.get(song.id),
       key: song.key,

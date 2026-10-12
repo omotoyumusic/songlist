@@ -97,10 +97,10 @@
     toastTimer = window.setTimeout(() => toast.classList.remove('show'), 2800);
   }
 
-  function userDisplayName() {
-    if (!user) return '';
-    const metadata = user.user_metadata || {};
-    return String(metadata.full_name || metadata.name || user.email?.split('@')[0] || 'ユーザー').trim();
+  function userDisplayName(account = user) {
+    if (!account) return '';
+    const metadata = account.user_metadata || {};
+    return String(metadata.full_name || metadata.name || account.email?.split('@')[0] || 'ユーザー').trim();
   }
 
   function personalView() {
@@ -133,10 +133,14 @@
     updatePreview();
   }
 
-  function sortSongs(list) {
-    const mode = $('#sort-mode').value;
+  function sortSongs(list, mode = $('#sort-mode').value) {
     return list.sort((left, right) => {
       if (mode === 'recent') return (right.lastSung || '').localeCompare(left.lastSung || '') || collator.compare(left.artist, right.artist) || collator.compare(left.title, right.title);
+      const storedOrderField = mode === 'title' ? 'titleSortIndex' : 'artistSortIndex';
+      const storedOrder = sharedListMode && Number.isInteger(left[storedOrderField]) && Number.isInteger(right[storedOrderField])
+        ? left[storedOrderField] - right[storedOrderField]
+        : null;
+      if (storedOrder !== null) return storedOrder;
       if (mode === 'title') return collator.compare(left.songKana || left.title, right.songKana || right.title) || collator.compare(left.title, right.title) || collator.compare(left.artistKana || left.artist, right.artistKana || right.artist);
       return collator.compare(left.artistKana || left.artist, right.artistKana || right.artist) || collator.compare(left.artist, right.artist) || collator.compare(left.songKana || left.title, right.songKana || right.title) || collator.compare(left.title, right.title);
     });
@@ -254,10 +258,15 @@
   }
 
   function publicSongSnapshot(list) {
-    return list.filter((song) => song.visible).map((song) => ({
+    const visibleSongs = list.filter((song) => song.visible);
+    const artistOrder = new Map(sortSongs(visibleSongs.slice(), 'artist').map((song, index) => [song.id, index]));
+    const titleOrder = new Map(sortSongs(visibleSongs.slice(), 'title').map((song, index) => [song.id, index]));
+    return visibleSongs.map((song) => ({
       id: song.id,
       artist: song.artist,
       title: song.title,
+      artistSortIndex: artistOrder.get(song.id),
+      titleSortIndex: titleOrder.get(song.id),
       key: song.key,
       transpose: song.transpose,
       lastSung: song.lastSung,
@@ -267,8 +276,8 @@
 
   async function loadSharedList() {
     const shareId = new URLSearchParams(window.location.search).get('list');
-    if (!shareId || !supabase) throw new Error('共有リンクが正しくありません。');
-    setSyncState('共有リストを読み込み中', 'warn');
+    if (!shareId || !supabase) throw new Error('閲覧用URLが正しくありません。');
+    setSyncState('閲覧用リストを読み込み中', 'warn');
     const { data: rows, error } = await supabase.rpc('get_public_song_list', { p_share_id: shareId });
     if (error) throw error;
     const data = Array.isArray(rows) ? rows[0] : rows;
@@ -279,17 +288,17 @@
     updateAccessUi();
   }
 
-  async function syncUserShare(list, createIfMissing) {
-    if (!user || !supabase) throw new Error('ログインが必要です。');
+  async function syncUserShare(list, createIfMissing, account = user) {
+    if (!account || !supabase) throw new Error('ログインが必要です。');
     const { data: existing, error: lookupError } = await supabase.from('public_song_list_shares')
-      .select('share_id').eq('user_id', user.id).maybeSingle();
+      .select('share_id').eq('user_id', account.id).maybeSingle();
     if (lookupError) throw lookupError;
     if (!existing && !createIfMissing) return null;
     const shareId = existing?.share_id || crypto.randomUUID();
     const { data, error } = await supabase.from('public_song_list_shares').upsert({
-      user_id: user.id,
+      user_id: account.id,
       share_id: shareId,
-      display_name: userDisplayName(),
+      display_name: userDisplayName(account),
       songs: publicSongSnapshot(list)
     }, { onConflict: 'user_id' }).select('share_id').single();
     if (error) throw error;
@@ -309,6 +318,10 @@
         if (generation !== loadGeneration) return;
         songs = Array.isArray(data?.songs) ? data.songs.map(normalizeSong) : [];
         setSyncState(data ? '自分のリストを読み込みました' : 'リストはまだ空です', 'ok');
+        if (data && generation === loadGeneration && user?.id === account.id) {
+          try { await syncUserShare(songs, false, account); }
+          catch (shareError) { console.error('Existing viewer snapshot could not be refreshed', shareError); }
+        }
       } else if (!sharedListMode) {
         songs = [];
         $('#auth-gate').classList.remove('hidden');
@@ -319,8 +332,9 @@
       console.error('Song list could not be loaded', error);
       if (generation !== loadGeneration) return;
       songs = [];
-      setSyncState('個人リストの読み込みに失敗しました', 'warn');
-      announce('個人リストを読み込めませんでした。時間をおいて再度お試しください。');
+      const listName = sharedListMode ? '閲覧用リスト' : '個人リスト';
+      setSyncState(listName + 'の読み込みに失敗しました', 'warn');
+      announce(listName + 'を読み込めませんでした。時間をおいて再度お試しください。');
     }
     if (generation !== loadGeneration) return;
     $('#setup-notice').classList.toggle('hidden', Boolean(config.supabaseUrl && config.supabaseAnonKey));
@@ -336,6 +350,8 @@
       artist: String(song.artist || ''),
       songKana: normalizeReading(song.songKana) || getKanaInitial(title),
       title: String(title),
+      artistSortIndex: Number.isInteger(song.artistSortIndex) ? song.artistSortIndex : null,
+      titleSortIndex: Number.isInteger(song.titleSortIndex) ? song.titleSortIndex : null,
       key: String(song.key || ''),
       transpose: Math.max(-24, Math.min(24, Number(song.transpose || 0) || 0)),
       lastSung: String(song.lastSung || ''),
@@ -707,6 +723,7 @@
       const url = new URL(window.location.href);
       url.search = '';
       url.searchParams.set('list', shareId);
+      url.searchParams.set('sort', $('#sort-mode').value);
       try {
         await navigator.clipboard.writeText(url.toString());
         announce('あなたのソングリストの閲覧用URLをコピーしました。');
@@ -715,7 +732,7 @@
       }
     } catch (error) {
       console.error('Personal share link could not be created', error);
-      announce('閲覧用リンクを作成できませんでした。Supabaseの共有設定を確認してください。');
+      announce('閲覧用リンクを作成できませんでした。Supabaseの設定を確認してください。');
     }
   }
 

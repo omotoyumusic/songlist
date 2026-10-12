@@ -184,8 +184,9 @@
     const notesCell = personalView() ? '<td><div class="note-cell" title="' + escapeHtml(song.notes || '') + '"><span>' + escapeHtml(song.notes || '—') + '</span></div></td>' : '';
     const artistReading = personalView() ? '<div class="cell-scroll reading-scroll" title="アーティスト名の読み仮名"><span class="artist-reading">' + escapeHtml(song.artistKana) + '</span></div>' : '';
     const songReading = personalView() ? '<div class="cell-scroll reading-scroll" title="曲名の読み仮名"><span class="song-reading">' + escapeHtml(song.songKana) + '</span></div>' : '';
+    const artistAddButton = personalView() ? '<button class="artist-add-button" type="button" data-action="add-artist" data-id="' + escapeHtml(song.id) + '" title="このアーティストの曲を追加" aria-label="' + escapeHtml(song.artist) + 'の曲を追加"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>' : '';
     return '<tr class="' + (song.visible ? '' : 'is-hidden-song') + '">' +
-      '<td><div class="artist-cell"><div class="cell-scroll"><span class="artist-name" title="' + escapeHtml(song.artist) + '">' + escapeHtml(song.artist) + hiddenMark + '</span></div>' + artistReading + '</div></td>' +
+      '<td><div class="artist-cell"><div class="artist-main"><div class="artist-info"><div class="cell-scroll"><span class="artist-name" title="' + escapeHtml(song.artist) + '">' + escapeHtml(song.artist) + hiddenMark + '</span></div>' + artistReading + '</div>' + artistAddButton + '</div></div></td>' +
       '<td><div class="song-cell"><div class="cell-scroll"><span class="song-name" title="' + escapeHtml(song.title) + '">' + escapeHtml(song.title) + '</span></div>' + songReading + '</div></td>' +
       '<td><div class="key-cell">' + quickKey + '</div></td>' +
       searchCell +
@@ -390,13 +391,13 @@
     return writeChain;
   }
 
-  function openSongDialog(song) {
+  function openSongDialog(song, defaults = {}) {
     const editing = Boolean(song);
-    $('#song-dialog-title').textContent = editing ? '曲を編集' : '曲を追加';
+    $('#song-dialog-title').textContent = editing ? '曲を編集' : defaults.artist ? '同じアーティストに曲を追加' : '曲を追加';
     $('#song-id').value = editing ? song.id : '';
-    $('#artist-reading').value = editing ? song.artistKana : '';
+    $('#artist-reading').value = editing ? song.artistKana : defaults.artistKana || '';
     $('#song-reading').value = editing ? song.songKana : '';
-    $('#artist-name').value = editing ? song.artist : '';
+    $('#artist-name').value = editing ? song.artist : defaults.artist || '';
     $('#song-title').value = editing ? song.title : '';
     fillKeySelect($('#song-key'), editing ? song.key : '');
     $('#transpose-value').value = editing ? song.transpose : 0;
@@ -406,6 +407,7 @@
     $('#song-visible').checked = editing ? song.visible : true;
     $('#form-error').classList.add('hidden');
     $('#song-dialog').showModal();
+    if (defaults.artist && !editing) $('#song-reading').focus();
   }
 
   function showError(element, message) {
@@ -448,30 +450,35 @@
   async function handleListAction(event) {
     const button = event.target.closest('[data-action]');
     if (!button) return;
+    const action = button.dataset.action;
     const song = songs.find((item) => item.id === button.dataset.id);
+    if (action === 'add-artist') {
+      if (personalView() && song) openSongDialog(null, { artist: song.artist, artistKana: song.artistKana });
+      return;
+    }
     if (!song) return;
-    if (button.dataset.action === 'edit') openSongDialog(song);
-    if (button.dataset.action === 'chord-search') {
+    if (action === 'edit') openSongDialog(song);
+    if (action === 'chord-search') {
       const query = encodeURIComponent(song.artist + ' ' + song.title + ' Chordwiki');
       window.open('https://www.google.com/search?q=' + query, '_blank', 'noopener,noreferrer');
     }
-    if (button.dataset.action === 'toggle-visible') {
+    if (action === 'toggle-visible') {
       song.visible = !song.visible;
       render();
       try { await persistSongs(); announce(song.visible ? '一覧に表示しました。' : '一覧から非表示にしました。'); } catch (_) { /* Local backup remains available. */ }
     }
-    if (button.dataset.action === 'delete') {
+    if (action === 'delete') {
       if (!window.confirm('「' + song.artist + ' / ' + song.title + '」を削除しますか？')) return;
       songs = songs.filter((item) => item.id !== song.id);
       render();
       try { await persistSongs(); announce('曲を削除しました。'); } catch (_) { /* Local backup remains available. */ }
     }
-    if (button.dataset.action === 'sung') {
+    if (action === 'sung') {
       song.lastSung = localDate();
       render();
       try { await persistSongs(); announce('最後に歌った日を今日にしました。'); } catch (_) { /* Local backup remains available. */ }
     }
-    if (button.dataset.action === 'transpose') {
+    if (action === 'transpose') {
       song.transpose = Math.max(-24, Math.min(24, Number(song.transpose || 0) + Number(button.dataset.delta)));
       render();
       try { await persistSongs(); } catch (_) { /* Local backup remains available. */ }

@@ -1,2 +1,5 @@
 [functions.songlist-github-sync]
 verify_jwt = true
+
+[functions.delete-songlist-account]
+verify_jwt = true

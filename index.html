@@ -9,9 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261012-polish-1">
   <script src="config.js"></script>
-  <script defer src="app.js?v=20261012-artist-add-1"></script>
+  <script defer src="app.js?v=20261012-polish-1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -80,27 +80,29 @@
       </div>
 
       <div class="toolbar">
-        <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="search-input" type="search" placeholder="アーティスト名・曲名で検索" autocomplete="off"><kbd>⌘ K</kbd></label>
+        <div class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="search-input" type="search" aria-label="アーティスト名・曲名・読み仮名で検索" aria-describedby="search-help" placeholder="アーティスト名・曲名・読み仮名で検索" autocomplete="off"><button id="search-clear" class="search-clear hidden" type="button" aria-label="検索をクリア" title="検索をクリア（Esc）">×</button><kbd>⌘ K</kbd></div>
         <div class="toolbar-filters">
           <label class="select-wrap"><span class="sr-only">並び順</span><select id="sort-mode"><option value="artist">アーティスト順</option><option value="title">曲名順</option><option value="recent">最後に歌った順</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></label>
           <label id="hidden-filter-wrap" class="check-filter hidden"><input id="show-hidden" type="checkbox"><span class="checkmark"></span>非表示も見る</label>
         </div>
       </div>
 
-      <div class="list-meta"><span id="result-count">曲を表示しています</span><span class="sort-note"><span class="sort-symbol">↕</span> 五十音順</span></div>
+      <p id="search-help" class="search-help">スペースで区切ると、アーティスト名と曲名を組み合わせて検索できます。</p>
+      <div class="list-meta"><span id="result-count" role="status" aria-live="polite">曲を表示しています</span><span class="sort-note"><span class="sort-symbol">↕</span> 五十音順</span></div>
       <div id="song-list" class="table-wrap"><div class="loading-state"><span class="loader"></span>リストを準備しています</div></div>
-      <div id="empty-state" class="empty-state hidden"><div class="empty-music">♪</div><strong>曲が見つかりませんでした</strong><p>検索キーワードや絞り込み条件を変えてみてください。</p></div>
+      <div id="empty-state" class="empty-state hidden"><div class="empty-music" aria-hidden="true">♪</div><strong id="empty-title">曲が見つかりませんでした</strong><p id="empty-description">検索キーワードや絞り込み条件を変えてみてください。</p><button id="empty-add" class="button button-green hidden" type="button">最初の曲を追加</button><button id="empty-clear" class="button button-outline hidden" type="button">検索をクリア</button></div>
     </section>
 
     <footer class="page-footer"><span>SONGLIST <span id="footer-year"></span></span></footer>
   </main>
 
-  <dialog id="song-dialog" class="modal song-modal">
+  <dialog id="song-dialog" class="modal song-modal" aria-labelledby="song-dialog-title">
     <form id="song-form" method="dialog">
       <div class="modal-heading"><div><p class="eyebrow">SONG DETAILS</p><h2 id="song-dialog-title">曲を追加</h2></div><button class="icon-button" type="button" data-close="song-dialog" aria-label="閉じる">×</button></div>
       <input id="song-id" type="hidden">
+      <p id="artist-context" class="artist-context hidden" role="status"></p>
       <div class="form-grid">
-        <label class="field"><span>アーティスト名の読み仮名 <em>*</em></span><input id="artist-reading" maxlength="120" placeholder="例：あいみょん"><small>五十音順に使います。既存の1文字だけの読みは、読み仮名全体に直してください</small></label>
+        <label class="field"><span>アーティスト名の読み仮名 <em>*</em></span><input id="artist-reading" maxlength="120" placeholder="例：あいみょん"><small>読み仮名全体を入力。並び替えと検索に使います。</small></label>
         <label class="field"><span>アーティスト名 <em>*</em></span><input id="artist-name" required maxlength="120" placeholder="例：あいみょん"></label>
         <label class="field"><span>曲名の読み仮名 <em>*</em></span><input id="song-reading" maxlength="160" placeholder="例：まりーごーるど"><small>読み仮名を最初から最後まで入力してください</small></label>
         <label class="field"><span>曲名 <em>*</em></span><input id="song-title" required maxlength="160" placeholder="例：マリーゴールド"></label>

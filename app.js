@@ -30,7 +30,7 @@
   }
 
   function normalizeReading(value) {
-    return Array.from(String(value || '').trim(), (char) => {
+    return Array.from(String(value || '').normalize('NFKC').trim(), (char) => {
       const code = char.charCodeAt(0);
       return code >= 0x30a1 && code <= 0x30f6 ? String.fromCharCode(code - 0x60) : char;
     }).join('');
@@ -43,11 +43,23 @@
 
   function fillKeySelect(select, selected) {
     select.innerHTML = '<option value="">未設定</option>' + keys.map((key) => '<option value="' + key + '">' + key + '</option>').join('');
-    if (keys.includes(selected)) select.value = selected;
+    const normalized = normalizeKey(selected);
+    if (keys.includes(normalized)) select.value = normalized;
+    else if (selected) {
+      const option = document.createElement('option');
+      option.value = selected;
+      option.textContent = selected + '（登録済み）';
+      select.append(option);
+      select.value = selected;
+    }
+  }
+
+  function normalizeKey(value) {
+    return String(value || '').normalize('NFKC').trim().replace(/♯/g, '#').replace(/♭/g, 'b');
   }
 
   function keyInfo(key) {
-    const match = String(key || '').trim().match(/^([A-G](?:#|b)?)(m?)$/i);
+    const match = normalizeKey(key).match(/^([A-G](?:#|b)?)(m?)$/i);
     if (!match) return null;
     const tonic = match[1].charAt(0).toUpperCase() + match[1].slice(1);
     if (!(tonic in pitchByName)) return null;
@@ -123,7 +135,7 @@
     const effective = sungKey(tempSong);
     const relative = parallelKey(effective);
     const preview = $('#key-preview');
-    preview.innerHTML = '<span class="key-chip">' + escapeHtml(effective || '—') + '</span><span class="parallel-link">→</span><span class="parallel-chip">' + escapeHtml(relative || '—') + '</span>';
+    preview.innerHTML = '<span class="key-chip">' + escapeHtml(effective || '—') + '</span><span class="parallel-link">/</span><span class="parallel-chip">' + escapeHtml(relative || '—') + '</span>';
   }
 
   function updateTransposeOutput() {
@@ -147,14 +159,15 @@
   }
 
   function filteredSongs() {
-    const query = $('#search-input').value.trim().toLocaleLowerCase('ja');
+    const terms = normalizeReading($('#search-input').value).toLocaleLowerCase('ja').split(/\s+/u).filter(Boolean);
     const showHidden = personalView() && $('#show-hidden').checked;
     const list = songs.filter((song) => {
       if (!song.visible && !showHidden) return false;
-      if (!query) return true;
+      if (!terms.length) return true;
       const searchable = [song.artist, song.artistKana, song.title, song.songKana, song.key, sungKey(song)];
       if (personalView()) searchable.push(song.notes);
-      return searchable.some((value) => String(value || '').toLocaleLowerCase('ja').includes(query));
+      const fields = searchable.map((value) => normalizeReading(value).toLocaleLowerCase('ja'));
+      return terms.every((term) => fields.some((value) => value.includes(term)));
     });
     return sortSongs(list);
   }
@@ -202,9 +215,15 @@
     $('#artist-count').textContent = artistCount.toLocaleString('ja-JP');
     $('#song-count').textContent = countScope.length.toLocaleString('ja-JP');
     const isFiltered = Boolean($('#search-input').value.trim());
+    $('#search-clear').classList.toggle('hidden', !isFiltered);
     $('#result-count').textContent = isFiltered ? '検索結果 ' + list.length.toLocaleString('ja-JP') + ' 曲' : '全 ' + list.length.toLocaleString('ja-JP') + ' 曲';
     $('.sort-note').innerHTML = '<span class="sort-symbol">↕</span> ' + ({ artist: 'アーティスト五十音順', title: '曲名五十音順', recent: '最後に歌った日順' }[$('#sort-mode').value] || 'アーティスト五十音順');
     $('#empty-state').classList.toggle('hidden', list.length > 0);
+    const emptyLibrary = canEdit && songs.length === 0;
+    $('#empty-title').textContent = emptyLibrary ? '最初の1曲を登録しましょう' : '曲が見つかりませんでした';
+    $('#empty-description').textContent = emptyLibrary ? '「曲を追加」から登録するか、CSVでまとめて取り込めます。' : isFiltered ? '読み仮名でも検索できます。キーワードを短くするか、検索をクリアしてください。' : '表示できる曲がありません。';
+    $('#empty-add').classList.toggle('hidden', !emptyLibrary);
+    $('#empty-clear').classList.toggle('hidden', !isFiltered || emptyLibrary);
     if (!list.length) {
       $('#song-list').innerHTML = '';
       return;
@@ -394,6 +413,9 @@
   function openSongDialog(song, defaults = {}) {
     const editing = Boolean(song);
     $('#song-dialog-title').textContent = editing ? '曲を編集' : defaults.artist ? '同じアーティストに曲を追加' : '曲を追加';
+    const artistContext = $('#artist-context');
+    artistContext.classList.toggle('hidden', editing || !defaults.artist);
+    artistContext.textContent = defaults.artist ? '「' + defaults.artist + '」のアーティスト名・読み仮名を引き継ぎました。新しい曲の情報を入力してください。' : '';
     $('#song-id').value = editing ? song.id : '';
     $('#artist-reading').value = editing ? song.artistKana : defaults.artistKana || '';
     $('#song-reading').value = editing ? song.songKana : '';
@@ -768,6 +790,11 @@
     if (sharedListMode) updateAccessUi();
     if (params.get('sort') === 'title' || params.get('sort') === 'recent') $('#sort-mode').value = params.get('sort');
     $('#add-button').addEventListener('click', () => openSongDialog(null));
+    $('#empty-add').addEventListener('click', () => { if (personalView()) openSongDialog(null); });
+    const clearSearch = () => { $('#search-input').value = ''; render(); $('#search-input').focus(); };
+    $('#search-clear').addEventListener('click', clearSearch);
+    $('#empty-clear').addEventListener('click', clearSearch);
+    $('#search-input').addEventListener('keydown', (event) => { if (event.key === 'Escape') clearSearch(); });
     $('#song-form').addEventListener('submit', saveSong);
     $('#song-list').addEventListener('click', handleListAction);
     $('#transpose-down').addEventListener('click', () => { $('#transpose-value').value = Number($('#transpose-value').value || 0) - 1; updateTransposeOutput(); });

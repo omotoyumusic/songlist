@@ -126,3 +126,65 @@ h1, h2, p { margin-top: 0; }
 .auth-footnote { margin: 22px 0 0; text-align: center; }
 .auth-setup-hint { margin: 16px 0 0; padding: 10px 12px; border-radius: 8px; color: #806d45; background: #fff8e9; font-size: 10px; line-height: 1.6; }
 @media (max-width: 600px) { .auth-gate { min-height: calc(100vh - 60px); align-items: flex-start; padding: 28px 15px; }.auth-card { padding: 30px 23px 27px; border-radius: 16px; }.auth-brand { margin-bottom: 27px; } }
+
+/* Everyday use: readable rows, clear search and comfortable form controls. */
+.page-shell { width: min(1440px, calc(100% - 48px)); }
+.topbar { padding-inline: max(24px, calc((100vw - 1440px) / 2)); }
+.list-panel { box-shadow: 0 6px 24px #21432e08; }
+.list-title-row { min-width: 0; }
+.list-title-row h2 { overflow-wrap: anywhere; }
+.list-title-row .button { flex-shrink: 0; }
+.song-table thead { background: #f3f8f4; }
+.song-table th { padding-block: 11px; color: #4f6858; background: #f3f8f4; font-size: 10px; font-weight: 600; }
+.song-table tbody tr:nth-child(even) { background: #fbfdfb; }
+.song-table tbody tr:hover, .song-table tbody tr:focus-within { background: #f0f8f2; }
+.song-table td { font-size: 12px; }
+.artist-reading, .song-reading { color: #708578; }
+.base-key { color: #657b6c; }
+.date-empty { color: #78867d; }
+.artist-add-button { width: 28px; height: 28px; flex-basis: 28px; border-color: #cde1d3; color: #267448; background: #f0f8f2; }
+button:focus-visible, .check-filter input:focus-visible + .checkmark { outline: 3px solid #81bb94; outline-offset: 2px; }
+button:disabled { cursor: wait; opacity: .6; }
+.row-action[data-action="delete"]:hover { color: #a34136; border-color: #eccac5; background: #fff5f3; }
+.search-box { flex: 1 1 420px; max-width: 620px; }
+.search-box:focus-within { border-color: #83b894; box-shadow: 0 0 0 3px #edf7ef; }
+.search-box input { min-width: 0; }
+.search-box input::-webkit-search-cancel-button { display: none; }
+.search-clear { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px; padding: 0; border: 0; border-radius: 6px; color: #567362; background: #eaf3ec; font-size: 18px; }
+.search-clear:hover { background: #dceee1; }
+.search-help { margin: -6px 28px 14px; color: #718578; font-size: 10px; line-height: 1.6; }
+.empty-state { padding: 28px 20px; }
+.empty-state strong { font-size: 14px; }
+.empty-state p { max-width: 420px; color: #748279; font-size: 11px; line-height: 1.8; }
+.empty-state .button { margin-top: 16px; }
+.song-modal { width: min(640px, calc(100vw - 32px)); }
+.artist-context { margin: -6px 0 22px; padding: 12px 14px; border: 1px solid #d4e7d9; border-radius: 9px; color: #39694b; background: #f1f8f3; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.field { font-size: 12px; }
+.field input, .field select, .field textarea { min-height: 44px; font-size: 14px; }
+.field small { color: #7c8c81; font-size: 10px; line-height: 1.6; }
+.modal-heading h2 { line-height: 1.5; }
+.modal-heading .icon-button { flex-shrink: 0; }
+.transpose-control { height: 44px; }
+.modal-actions .button { min-height: 42px; font-size: 12px; }
+@media (max-width: 900px) {
+  .page-shell { width: calc(100% - 28px); }
+  .search-box { flex: none; max-width: none; }
+}
+@media (max-width: 600px) {
+  .topbar { height: auto; min-height: 64px; padding: 12px 14px; gap: 10px; flex-wrap: wrap; }
+  .top-actions { flex-wrap: wrap; gap: 6px; }
+  .top-actions .button { min-height: 36px; }
+  .search-help { margin: -4px 17px 12px; font-size: 10px; }
+  .search-box { height: 44px; }
+  .search-box input, .field input, .field select, .field textarea, .auth-gate-form .field input { font-size: 16px; }
+  .song-table th { padding-block: 8px; font-size: 8px; }
+  .song-table td { font-size: 10px; }
+  .artist-main { flex-wrap: wrap; gap: 4px; }
+  .artist-info { flex-basis: 100%; }
+  .artist-add-button { width: 26px; height: 26px; flex-basis: 26px; }
+  .artist-context { font-size: 11px; padding: 11px; }
+  .panel-actions .button { min-height: 38px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

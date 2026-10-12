@@ -11,7 +11,6 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="config.js"></script>
-  <script src="data/initial-songs.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -21,13 +20,33 @@
       <span>song<span class="brand-light">list</span></span>
     </a>
     <div class="top-actions">
-      <span id="sync-status" class="sync-status" aria-live="polite"><span class="status-dot"></span><span id="sync-label">一覧を読み込み中</span></span>
-      <button id="auth-button" class="button button-soft" type="button">ログイン</button>
+      <span id="sync-status" class="sync-status" aria-live="polite"><span class="status-dot"></span><span id="sync-label">認証を確認中</span></span>
+      <button id="auth-button" class="button button-soft hidden" type="button">自分のリストを作る</button>
       <button id="logout-button" class="button button-soft hidden" type="button">ログアウト</button>
     </div>
   </header>
 
-  <main class="page-shell">
+  <main id="auth-gate" class="auth-gate">
+    <section class="auth-card">
+      <div class="auth-brand"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span><span>song<span class="brand-light">list</span></span></div>
+      <p class="eyebrow auth-eyebrow">YOUR PERSONAL SONGBOOK</p>
+      <h1 id="auth-heading">自分だけの<br><span>ソングリストを。</span></h1>
+      <p id="auth-intro" class="auth-description">アカウントを作成して、歌いたい曲やキーを自分専用のリストに保存しましょう。</p>
+      <form id="auth-form" class="auth-gate-form" novalidate>
+        <label id="display-name-field" class="field"><span>ユーザー名</span><input id="auth-display-name" type="text" maxlength="60" autocomplete="nickname" placeholder="例：ゆう"></label>
+        <label class="field"><span>メールアドレス</span><input id="auth-email" type="email" required autocomplete="email" placeholder="you@example.com"></label>
+        <label class="field"><span>パスワード</span><input id="auth-password" type="password" required minlength="6" autocomplete="new-password" placeholder="6文字以上"></label>
+        <div id="auth-error" class="form-error hidden" role="alert"></div>
+        <div id="auth-message" class="auth-message hidden" role="status"></div>
+        <button id="auth-submit-button" class="button button-green auth-submit" type="submit">無料で新規登録</button>
+      </form>
+      <p id="supabase-setup-hint" class="auth-setup-hint hidden">このアプリはまだSupabaseに接続されていません。管理者が接続設定を完了すると登録できます。</p>
+      <p class="auth-switch"><span id="auth-switch-prompt">すでにアカウントをお持ちですか？</span> <button id="auth-mode-toggle" type="button">ログイン</button></p>
+      <p class="auth-footnote">リストはアカウントごとに分けて保存されます。</p>
+    </section>
+  </main>
+
+  <main id="app-shell" class="page-shell hidden">
     <section class="hero" aria-labelledby="page-title">
       <div class="hero-copy">
         <p class="eyebrow"><span class="eyebrow-line"></span> YOUR PERSONAL SONGBOOK</p>
@@ -54,18 +73,18 @@
         <span class="stat-caption">SONGS</span>
       </div>
       <div class="overview-share">
-        <span class="share-caption">このリストをシェア</span>
+      <span class="share-caption">閲覧用リンク</span>
         <button id="share-button" class="button button-share" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>URLをコピー</span></button>
       </div>
     </section>
 
     <section id="setup-notice" class="notice hidden" role="status">
-      <span class="notice-icon">i</span><span>初回設定が必要です。READMEの手順でSupabaseとGitHubを接続すると、編集内容を共有できます。</span>
+      <span class="notice-icon">i</span><span>Supabaseの設定が完了すると、アカウントごとのリストを保存できます。</span>
     </section>
 
     <section class="list-panel" aria-labelledby="list-title">
       <div class="panel-heading">
-        <div><p class="eyebrow panel-eyebrow">YOUR LIBRARY</p><h2 id="list-title">公開ソングリスト</h2></div>
+        <div><p class="eyebrow panel-eyebrow">YOUR LIBRARY</p><h2 id="list-title">マイソングリスト</h2></div>
         <div class="panel-actions">
           <button id="import-button" class="button button-outline user-only hidden" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>CSVを取り込む</button>
           <input id="import-file" class="hidden" type="file" accept=".csv,text/csv">
@@ -104,24 +123,10 @@
         <div class="field key-preview-field"><span>歌うキー / 平行調</span><div id="key-preview" class="key-preview"><span class="key-chip">—</span><span class="parallel-link">→</span><span class="parallel-chip">—</span></div></div>
         <label class="field"><span>最後に歌った日</span><input id="last-sung" type="date"></label>
         <label class="field field-wide"><span>備考</span><textarea id="song-notes" rows="3" maxlength="1200" placeholder="気をつけるポイント、転調など"></textarea></label>
-        <label class="visibility-toggle"><input id="song-visible" type="checkbox" checked><span class="toggle-track"><i></i></span><span><strong>一覧に表示する</strong><small>オーナーのリストを非表示にすると、一般公開リストからも隠れます</small></span></label>
+          <label class="visibility-toggle"><input id="song-visible" type="checkbox" checked><span class="toggle-track"><i></i></span><span><strong>閲覧用リストに表示する</strong><small>オフにすると、あなたの閲覧用URLにも表示されません</small></span></label>
       </div>
       <div id="form-error" class="form-error hidden" role="alert"></div>
       <div class="modal-actions"><button class="button button-outline" type="button" data-close="song-dialog">キャンセル</button><button id="save-song-button" class="button button-green" type="submit">保存する</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="auth-dialog" class="modal auth-modal">
-    <form id="auth-form" method="dialog">
-      <div class="modal-heading"><div><p class="eyebrow">YOUR SONG LIST</p><h2>ログイン・新規登録</h2></div><button class="icon-button" type="button" data-close="auth-dialog" aria-label="閉じる">×</button></div>
-      <p class="auth-description">ログインすると、自分専用のソングリストを作成・編集できます。ログインしなくても公開リストを閲覧・検索できます。</p>
-      <label class="field"><span>ユーザー名 <small class="inline-hint">登録時は必須。ログイン後の変更にも使えます</small></span><input id="auth-display-name" type="text" maxlength="60" autocomplete="nickname" placeholder="例：ゆう"></label>
-      <label class="field"><span>メールアドレス</span><input id="auth-email" type="email" required autocomplete="email" placeholder="you@example.com"></label>
-      <label class="field"><span>パスワード</span><input id="auth-password" type="password" required minlength="6" autocomplete="current-password" placeholder="6文字以上"></label>
-      <div id="auth-error" class="form-error hidden" role="alert"></div>
-      <div id="auth-message" class="auth-message hidden" role="status"></div>
-      <div class="modal-actions auth-actions"><button id="signup-button" class="button button-outline" type="button">新規登録</button><button class="button button-green" type="submit">ログイン</button></div>
-      <p class="auth-footnote">曲リストはアカウントごとに分けて保存されます。</p>
     </form>
   </dialog>
 

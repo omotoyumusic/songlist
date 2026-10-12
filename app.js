@@ -75,7 +75,7 @@
 
   function signed(value) {
     const number = Number(value || 0);
-    return number > 0 ? '+' + number : String(number);
+    return number === 0 ? '±0' : number > 0 ? '+' + number : String(number);
   }
 
   function localDate() {
@@ -178,8 +178,8 @@
     const actionCell = personalView() ? '<td><div class="row-actions">' + adminActions + '</div></td>' : '';
     const transposeLabel = '(' + signed(song.transpose) + ')';
     const quickKey = personalView()
-      ? '<span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><button class="key-nudge" type="button" data-action="transpose" data-delta="-1" data-id="' + escapeHtml(song.id) + '" aria-label="半音下げる">−</button><span class="transpose-label">' + escapeHtml(transposeLabel) + '</span><span class="key-chip" title="自分が歌うキー">' + escapeHtml(key || '—') + '</span><button class="key-nudge" type="button" data-action="transpose" data-delta="1" data-id="' + escapeHtml(song.id) + '" aria-label="半音上げる">＋</button><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>'
-      : '<span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><span class="transpose-label">' + escapeHtml(transposeLabel) + '</span><span class="key-chip" title="自分が歌うキー">' + escapeHtml(key || '—') + '</span><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>';
+      ? '<span class="transpose-label key-chip">' + escapeHtml(transposeLabel) + '</span><span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><button class="key-nudge" type="button" data-action="transpose" data-delta="-1" data-id="' + escapeHtml(song.id) + '" aria-label="半音下げる">−</button><span class="key-chip" title="自分が歌うキー">' + escapeHtml(key || '—') + '</span><button class="key-nudge" type="button" data-action="transpose" data-delta="1" data-id="' + escapeHtml(song.id) + '" aria-label="半音上げる">＋</button><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>'
+      : '<span class="transpose-label key-chip">' + escapeHtml(transposeLabel) + '</span><span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><span class="key-chip" title="自分が歌うキー">' + escapeHtml(key || '—') + '</span><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>';
     const hiddenMark = song.visible ? '' : '<span class="hidden-pill">非表示</span>';
     const notesCell = personalView() ? '<td><div class="note-cell" title="' + escapeHtml(song.notes || '') + '"><span>' + escapeHtml(song.notes || '—') + '</span></div></td>' : '';
     const artistReading = personalView() ? '<div class="cell-scroll reading-scroll" title="アーティスト名の読み仮名"><span class="artist-reading">' + escapeHtml(song.artistKana) + '</span></div>' : '';
@@ -213,7 +213,7 @@
     const notesHead = canEdit ? '<th scope="col">備考</th>' : '';
     const notesCol = canEdit ? '<col class="notes">' : '';
     const listType = canEdit ? ' owner-list' : ' public-list';
-    $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">原曲 → （移調） 歌うキー / 平行調</th><th class="search-heading" scope="col" title="Chordwikiで検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + list.map(songRow).join('') + '</tbody></table>';
+    $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">（移調）原曲 → 歌うキー / 平行調</th><th class="search-heading" scope="col" title="Chordwikiで検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + list.map(songRow).join('') + '</tbody></table>';
   }
 
   function updateAccessUi() {

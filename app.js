@@ -38,6 +38,10 @@
   let authBusy = false;
   let mailCooldown = 0;
   let loadGeneration = 0;
+  let activeListLoad = null;
+  const mobileLayout = window.matchMedia('(max-width: 700px)');
+  const openMobileSongs = new Set();
+  let renderedListScope = '';
   let sharedListMode = false;
   let sharedListRecord = null;
   let authMode = 'signup';
@@ -247,8 +251,13 @@
 
   function render() {
     updateArtistOptions();
-    updateDataUi();
-    const openedCards = [...document.querySelectorAll('.song-card[open]')].map((el) => el.dataset.songId);
+    const scope = sharedListMode ? 'share:' + new URLSearchParams(window.location.search).get('list') : 'user:' + (user?.id || '');
+    if (renderedListScope !== scope) openMobileSongs.clear();
+    else document.querySelectorAll('.song-card').forEach((card) => {
+      if (card.open) openMobileSongs.add(card.dataset.songId);
+      else openMobileSongs.delete(card.dataset.songId);
+    });
+    renderedListScope = scope;
     const focused = document.activeElement?.dataset;
     const focusKey = focused?.action ? {action:focused.action,id:focused.id,delta:focused.delta} : null;
     if ($('#history-dialog').open) renderHistory();
@@ -273,6 +282,7 @@
       $('#song-list').innerHTML = '';
       $('#mobile-song-list').innerHTML = '';
       $('#load-more').classList.add('hidden');
+      updateDataUi();
       return;
     }
     const actionHead = canEdit ? '<th scope="col">操作</th>' : '';
@@ -281,11 +291,16 @@
     const notesCol = canEdit ? '<col class="notes">' : '';
     const listType = canEdit ? ' owner-list' : ' public-list';
     const shown = list.slice(0, pageLimit);
-    $('#mobile-song-list').innerHTML = shown.map(songCard).join('');
     $('#load-more').classList.toggle('hidden', list.length <= shown.length);
     $('#load-more').textContent = 'さらに表示（残り ' + (list.length - shown.length) + ' 曲）';
-    $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">（移調）原曲 → 歌うキー / 平行調</th><th class="search-heading" scope="col" title="Chordwiki・YouTube・コード譜検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
-    document.querySelectorAll('.song-card').forEach((el) => { el.open = openedCards.includes(el.dataset.songId); });
+    if (mobileLayout.matches) {
+      if ($('#song-list').hasChildNodes()) $('#song-list').replaceChildren();
+      $('#mobile-song-list').innerHTML = shown.map(songCard).join('');
+      $('#mobile-song-list').querySelectorAll('.song-card').forEach((card) => { card.open = openMobileSongs.has(card.dataset.songId); });
+    } else {
+      if ($('#mobile-song-list').hasChildNodes()) $('#mobile-song-list').replaceChildren();
+      $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">（移調）原曲 → 歌うキー / 平行調</th><th class="search-heading" scope="col" title="Chordwiki・YouTube・コード譜検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
+    }
     updateDataUi();
     if (focusKey) [...document.querySelectorAll('[data-action]')].find((el) => el.dataset.action === focusKey.action && el.dataset.id === focusKey.id && el.dataset.delta === focusKey.delta && el.offsetParent)?.focus({preventScroll:true});
   }
@@ -309,29 +324,41 @@
 
   async function initializeAuth() {
     if (!config.supabaseUrl || !config.supabaseAnonKey) return;
+    let bootstrapping = true;
+    let startupSession;
     try {
       const module = await import('https://esm.sh/@supabase/supabase-js@2.118.0');
       supabase = module.createClient(config.supabaseUrl, config.supabaseAnonKey);
       supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'INITIAL_SESSION') return; // getSession below is the single startup path.
+        if (bootstrapping) startupSession = session;
         if (event === 'PASSWORD_RECOVERY') {
           recoveryMode = true;
           user = session?.user || null;
           updateAccessUi();
           return;
         }
-        if (sharedListMode) return;
+        if (bootstrapping || sharedListMode) return;
         const nextUser = session?.user || null;
         if (user?.id === nextUser?.id) { if (nextUser) user = nextUser; return; }
+        ++loadGeneration; activeListLoad = null; openMobileSongs.clear();
         user = nextUser;
         songs = []; baseSongs = []; dirty = false; pendingDrafts = []; conflictState = null;
         shareRecord = null; loadState = 'idle'; revision = 0;
-        setTimeout(() => { updateAccessUi(); void loadSongsForCurrentUser(); }, 0);
+        const accountId = nextUser?.id;
+        setTimeout(() => {
+          if (user?.id !== accountId) return;
+          updateAccessUi();
+          if (user) void loadSongsForCurrentUser();
+        }, 0);
       });
       const result = await supabase.auth.getSession();
+      bootstrapping = false;
       if (result.error) throw result.error;
-      user = result.data.session?.user || null;
+      user = (startupSession === undefined ? result.data.session : startupSession)?.user || null;
       updateAccessUi();
     } catch (error) {
+      bootstrapping = false;
       console.error('Auth initialization failed', error);
       showError($('#auth-error'), '接続できません。通信状態を確認してページを再読み込みしてください。');
       setSyncState('接続できません', 'warn');
@@ -359,47 +386,74 @@
 
   async function loadSharedList() {
     const shareId = new URLSearchParams(window.location.search).get('list');
-    if (!shareId || !supabase) throw new Error('閲覧用URLが正しくありません。');
-    setSyncState('閲覧用リストを読み込み中', 'warn');
-    const { data: rows, error } = await supabase.rpc('get_public_song_list', { p_share_id: shareId });
-    if (error) throw error;
-    const data = Array.isArray(rows) ? rows[0] : rows;
-    if (!data) throw new Error('この閲覧用リストは見つからないか、共有が停止されています。');
-    sharedListRecord = data;
-    songs = Array.isArray(data.songs) ? data.songs.map(normalizeSong) : [];
-    setSyncState('閲覧用リスト', 'ok');
-    updateAccessUi();
+    if (!shareId || !config.supabaseUrl || !config.supabaseAnonKey) throw new Error('閲覧用URLが正しくありません。');
+    // This RPC already exposes only the enabled share's public projection.
+    // Read it anonymously without loading the auth SDK or inspecting a saved session.
+    const headers = { apikey:config.supabaseAnonKey, 'Content-Type':'application/json' };
+    if (config.supabaseAnonKey.startsWith('eyJ')) headers.Authorization = 'Bearer ' + config.supabaseAnonKey;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(),20000);
+    let response;
+    try {
+      response = await fetch(config.supabaseUrl.replace(/\/+$/u,'') + '/rest/v1/rpc/get_public_song_list', {
+        method:'POST', headers, body:JSON.stringify({p_share_id:shareId}),
+        credentials:'omit', cache:'no-store', signal:controller.signal
+      });
+      if (!response.ok) throw new Error('Shared list request failed: ' + response.status);
+      const rows = await response.json();
+      const data = Array.isArray(rows) ? rows[0] : rows;
+      if (!data || !Array.isArray(data.songs)) throw new Error('この閲覧用リストは見つからないか、共有が停止されています。');
+      return data;
+    } finally { window.clearTimeout(timeout); }
   }
 
-  async function loadSongsForCurrentUser() {
-    const generation = ++loadGeneration;
+  function loadSongsForCurrentUser() {
     const accountId = user?.id;
-    if (!sharedListMode && !accountId) { loadState = 'idle'; render(); return; }
-    if (dirty || saving) { announce('未保存の変更を保存または書き出してから再読み込みしてください。'); return; }
+    if (!sharedListMode && !accountId) {
+      ++loadGeneration; activeListLoad = null;
+      loadState = 'idle'; render(); return Promise.resolve();
+    }
+    const scope = sharedListMode ? 'share:' + new URLSearchParams(window.location.search).get('list') : 'user:' + accountId;
+    if (activeListLoad?.scope === scope) return activeListLoad.promise;
+    if (dirty || saving) { announce('未保存の変更を保存または書き出してから再読み込みしてください。'); return Promise.resolve(); }
+    const request = { scope, generation:++loadGeneration, promise:null };
+    activeListLoad = request;
+    request.promise = performListLoad(request,accountId);
+    return request.promise;
+  }
+
+  async function performListLoad(request,accountId) {
+    const isCurrent = () => request.generation === loadGeneration && (sharedListMode || user?.id === accountId);
     loadState = 'loading';
-    setSyncState('読み込み中', 'warn'); render();
+    setSyncState(sharedListMode ? '閲覧用リストを読み込み中' : '読み込み中', 'warn'); render();
     try {
-      if (sharedListMode) await loadSharedList();
-      else {
+      if (sharedListMode) {
+        const data = await loadSharedList();
+        if (!isCurrent()) return;
+        sharedListRecord = data;
+        songs = data.songs.map(normalizeSong);
+      } else {
         const { data, error } = await supabase.rpc('get_my_song_list');
         if (error) throw error;
-        if (generation !== loadGeneration || user?.id !== accountId) return;
+        if (!isCurrent()) return;
         if (!data || !Array.isArray(data.songs) || !Number.isSafeInteger(data.revision)) throw new Error('Invalid server response');
         songs = data.songs.map(normalizeSong);
         baseSongs = structuredClone(songs); revision = data.revision; shareRecord = data.share;
         try { pendingDrafts = drafts.list(accountId).filter((d) => d.draftId !== draftId); }
         catch (_) { storageError = true; }
       }
-      if (generation !== loadGeneration) return;
+      if (!isCurrent()) return;
       loadState = 'ready';
       setSyncState(sharedListMode ? '閲覧用リスト' : '保存済み', 'ok');
     } catch (error) {
-      if (generation !== loadGeneration) return;
+      if (!isCurrent()) return;
       console.error('List load failed', error);
       loadState = 'error';
       setSyncState('読み込みに失敗', 'warn');
+    } finally {
+      if (activeListLoad === request) activeListLoad = null;
     }
-    updateListTitle(); render();
+    if (isCurrent()) { updateListTitle(); render(); }
   }
 
   function normalizeSong(song, index) {
@@ -927,7 +981,7 @@
     });
     applyUrlFilters();
     setAuthMode('signup');
-    await initializeAuth();
+    if (!sharedListMode || recoveryMode) await initializeAuth();
     await loadSongsForCurrentUser();
   }
 
@@ -1047,8 +1101,11 @@
     render(); if (dirty) await persistSongs();
   }
   function updateArtistOptions() {
-    const visible = personalView() ? songs : songs.filter((s) => s.visible);
-    const artists = [...new Set(visible.map((song) => song.artist))].sort((a, b) => collator.compare(songs.find((s) => s.artist === a)?.artistKana || a, songs.find((s) => s.artist === b)?.artistKana || b));
+    const readings = new Map();
+    for (const song of songs) {
+      if ((personalView() || song.visible) && !readings.has(song.artist)) readings.set(song.artist,song.artistKana || song.artist);
+    }
+    const artists = [...readings.keys()].sort((a,b) => collator.compare(readings.get(a),readings.get(b)));
     const select = $('#artist-filter'), selected = select.value;
     const markup = '<option value="">全アーティスト</option>' + artists.map((name) => '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>').join('');
     if (select.innerHTML !== markup) { select.innerHTML = markup; if (artists.includes(selected)) select.value = selected; }
@@ -1404,11 +1461,11 @@
     const nav = $('#kana-index');
     if (!nav) return;
     kanaNavigation.targets = new Map();
-    list.forEach((song,index) => {
+    if (mobileLayout.matches && $('#sort-mode').value !== 'recent') list.forEach((song,index) => {
       const group = kanaGroup(song);
       if (!kanaNavigation.targets.has(group)) kanaNavigation.targets.set(group,{id:song.id,index,song});
     });
-    kanaNavigation.enabled = loadState === 'ready' && list.length > 0 && $('#sort-mode').value !== 'recent' && !recoveryMode && Boolean(user || sharedListMode) && window.matchMedia('(max-width: 700px)').matches;
+    kanaNavigation.enabled = loadState === 'ready' && list.length > 0 && $('#sort-mode').value !== 'recent' && !recoveryMode && Boolean(user || sharedListMode) && mobileLayout.matches;
     const titleOrder = $('#sort-mode').value === 'title';
     nav.setAttribute('aria-label',(titleOrder ? '曲名' : 'アーティスト名') + 'の五十音インデックス');
     nav.querySelectorAll('button').forEach((button) => {
@@ -1536,7 +1593,8 @@
       buttons[next].focus({preventScroll:true}); jumpKana(buttons[next].dataset.kana,true);
     });
     window.addEventListener('scroll',scheduleKanaLayout,{passive:true});
-    window.addEventListener('resize',() => updateKanaIndex(filteredSongs()),{passive:true});
+    window.addEventListener('resize',scheduleKanaLayout,{passive:true});
+    mobileLayout.addEventListener('change',() => render());
     window.visualViewport?.addEventListener('resize',scheduleKanaLayout,{passive:true});
     window.visualViewport?.addEventListener('scroll',scheduleKanaLayout,{passive:true});
     $('#mobile-song-list').addEventListener('toggle',scheduleKanaLayout,true);

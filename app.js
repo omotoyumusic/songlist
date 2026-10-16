@@ -12,7 +12,27 @@
   let supabase = null;
   let pendingImport = [];
   let toastTimer = 0;
-  let writeChain = Promise.resolve();
+  const Core = window.SonglistCore;
+  let drafts;
+  try { drafts = Core.draftStore(window.localStorage); }
+  catch (_) { drafts = Core.draftStore({ get length() { throw new Error('Storage unavailable'); }, setItem() { throw new Error('Storage unavailable'); } }); }
+  const draftId = crypto.randomUUID();
+  let revision = 0;
+  let baseSongs = [];
+  let loadState = 'idle';
+  let dirty = false;
+  let saving = false;
+  let saveTask = null;
+  let stamp = 0;
+  let storageError = false;
+  let pendingDrafts = [];
+  let restoreSource = null;
+  let conflictState = null;
+  let shareRecord = null;
+  let pageLimit = 100;
+  let recoveryMode = new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery';
+  let authBusy = false;
+  let mailCooldown = 0;
   let loadGeneration = 0;
   let sharedListMode = false;
   let sharedListRecord = null;
@@ -112,7 +132,7 @@
   function userDisplayName(account = user) {
     if (!account) return '';
     const metadata = account.user_metadata || {};
-    return String(metadata.full_name || metadata.name || account.email?.split('@')[0] || 'ユーザー').trim();
+    return String(metadata.full_name || metadata.name || 'ユーザー').trim();
   }
 
   function personalView() {
@@ -161,7 +181,9 @@
   function filteredSongs() {
     const terms = normalizeReading($('#search-input').value).toLocaleLowerCase('ja').split(/\s+/u).filter(Boolean);
     const showHidden = personalView() && $('#show-hidden').checked;
+    const artistFilter = $('#artist-filter').value;
     const list = songs.filter((song) => {
+      if (artistFilter && song.artist !== artistFilter) return false;
       if (!song.visible && !showHidden) return false;
       if (!terms.length) return true;
       const searchable = [song.artist, song.artistKana, song.title, song.songKana, song.key, sungKey(song)];
@@ -208,24 +230,31 @@
   }
 
   function render() {
+    updateArtistOptions();
+    updateDataUi();
+    const openedCards = [...document.querySelectorAll('.song-card[open]')].map((el) => el.dataset.songId);
+    const focused = document.activeElement?.dataset;
+    const focusKey = focused?.action ? {action:focused.action,id:focused.id,delta:focused.delta} : null;
     const list = filteredSongs();
     const canEdit = personalView();
     const countScope = canEdit ? songs : songs.filter((song) => song.visible);
     const artistCount = new Set(countScope.map((song) => song.artist)).size;
     $('#artist-count').textContent = artistCount.toLocaleString('ja-JP');
     $('#song-count').textContent = countScope.length.toLocaleString('ja-JP');
-    const isFiltered = Boolean($('#search-input').value.trim());
+    const isFiltered = Boolean($('#search-input').value.trim() || $('#artist-filter').value);
     $('#search-clear').classList.toggle('hidden', !isFiltered);
     $('#result-count').textContent = isFiltered ? '検索結果 ' + list.length.toLocaleString('ja-JP') + ' 曲' : '全 ' + list.length.toLocaleString('ja-JP') + ' 曲';
     $('.sort-note').innerHTML = '<span class="sort-symbol">↕</span> ' + ({ artist: 'アーティスト五十音順', title: '曲名五十音順', recent: '最後に歌った日順' }[$('#sort-mode').value] || 'アーティスト五十音順');
-    $('#empty-state').classList.toggle('hidden', list.length > 0);
-    const emptyLibrary = canEdit && songs.length === 0;
+    $('#empty-state').classList.toggle('hidden', list.length > 0 || loadState !== 'ready');
+    const emptyLibrary = canEdit && loadState === 'ready' && songs.length === 0;
     $('#empty-title').textContent = emptyLibrary ? '最初の1曲を登録しましょう' : '曲が見つかりませんでした';
     $('#empty-description').textContent = emptyLibrary ? '「曲を追加」から登録するか、CSVでまとめて取り込めます。' : isFiltered ? '読み仮名でも検索できます。キーワードを短くするか、検索をクリアしてください。' : '表示できる曲がありません。';
     $('#empty-add').classList.toggle('hidden', !emptyLibrary);
     $('#empty-clear').classList.toggle('hidden', !isFiltered || emptyLibrary);
     if (!list.length) {
       $('#song-list').innerHTML = '';
+      $('#mobile-song-list').innerHTML = '';
+      $('#load-more').classList.add('hidden');
       return;
     }
     const actionHead = canEdit ? '<th scope="col">操作</th>' : '';
@@ -233,13 +262,22 @@
     const notesHead = canEdit ? '<th scope="col">備考</th>' : '';
     const notesCol = canEdit ? '<col class="notes">' : '';
     const listType = canEdit ? ' owner-list' : ' public-list';
-    $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">（移調）原曲 → 歌うキー / 平行調</th><th class="search-heading" scope="col" title="Chordwikiで検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + list.map(songRow).join('') + '</tbody></table>';
+    const shown = list.slice(0, pageLimit);
+    $('#mobile-song-list').innerHTML = shown.map(songCard).join('');
+    $('#load-more').classList.toggle('hidden', list.length <= shown.length);
+    $('#load-more').textContent = 'さらに表示（残り ' + (list.length - shown.length) + ' 曲）';
+    $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">（移調）原曲 → 歌うキー / 平行調</th><th class="search-heading" scope="col" title="Chordwikiで検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
+    document.querySelectorAll('.song-card').forEach((el) => { el.open = openedCards.includes(el.dataset.songId); });
+    updateDataUi();
+    if (focusKey) [...document.querySelectorAll('[data-action]')].find((el) => el.dataset.action === focusKey.action && el.dataset.id === focusKey.id && el.dataset.delta === focusKey.delta && el.offsetParent)?.focus({preventScroll:true});
   }
 
   function updateAccessUi() {
     const canShowApp = Boolean(user || sharedListMode);
-    $('#auth-gate').classList.toggle('hidden', canShowApp);
-    $('#app-shell').classList.toggle('hidden', !canShowApp);
+    if (!user) document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+    $('#auth-gate').classList.toggle('hidden', canShowApp || recoveryMode);
+    $('#recovery-gate').classList.toggle('hidden', !recoveryMode);
+    $('#app-shell').classList.toggle('hidden', !canShowApp || recoveryMode);
     document.querySelectorAll('.user-only').forEach((element) => element.classList.toggle('hidden', !personalView()));
     $('#auth-button').classList.toggle('hidden', !sharedListMode);
     $('#logout-button').classList.toggle('hidden', !personalView());
@@ -247,33 +285,38 @@
     $('#hidden-filter-wrap').classList.toggle('hidden', !personalView());
     $('.overview-share').classList.toggle('hidden', !personalView());
     updateListTitle();
-    if (sharedListMode) setSyncState('閲覧用リスト', 'ok');
-    else if (user) setSyncState('マイリストにログイン中', 'ok');
+    if (!user && !sharedListMode) setSyncState('ログインしてください', '');
     render();
   }
 
   async function initializeAuth() {
     if (!config.supabaseUrl || !config.supabaseAnonKey) return;
     try {
-      const module = await import('https://esm.sh/@supabase/supabase-js@2');
+      const module = await import('https://esm.sh/@supabase/supabase-js@2.118.0');
       supabase = module.createClient(config.supabaseUrl, config.supabaseAnonKey);
-      const result = await supabase.auth.getSession();
-      user = result.data.session ? result.data.session.user : null;
-      supabase.auth.onAuthStateChange((_event, session) => {
-        const nextUser = session ? session.user : null;
-        if (sharedListMode) return;
-        if ((user && user.id) === (nextUser && nextUser.id)) {
-          if (nextUser) user = nextUser;
+      supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          recoveryMode = true;
+          user = session?.user || null;
+          updateAccessUi();
           return;
         }
+        if (sharedListMode) return;
+        const nextUser = session?.user || null;
+        if (user?.id === nextUser?.id) { if (nextUser) user = nextUser; return; }
         user = nextUser;
-        updateAccessUi();
-        void loadSongsForCurrentUser();
+        songs = []; baseSongs = []; dirty = false; pendingDrafts = []; conflictState = null;
+        shareRecord = null; loadState = 'idle'; revision = 0;
+        setTimeout(() => { updateAccessUi(); void loadSongsForCurrentUser(); }, 0);
       });
+      const result = await supabase.auth.getSession();
+      if (result.error) throw result.error;
+      user = result.data.session?.user || null;
       updateAccessUi();
     } catch (error) {
-      console.error('Supabase initialization failed', error);
-      setSyncState('認証に接続できません', 'warn');
+      console.error('Auth initialization failed', error);
+      showError($('#auth-error'), '接続できません。通信状態を確認してページを再読み込みしてください。');
+      setSyncState('接続できません', 'warn');
     }
   }
 
@@ -310,58 +353,35 @@
     updateAccessUi();
   }
 
-  async function syncUserShare(list, createIfMissing, account = user) {
-    if (!account || !supabase) throw new Error('ログインが必要です。');
-    const { data: existing, error: lookupError } = await supabase.from('public_song_list_shares')
-      .select('share_id').eq('user_id', account.id).maybeSingle();
-    if (lookupError) throw lookupError;
-    if (!existing && !createIfMissing) return null;
-    const shareId = existing?.share_id || crypto.randomUUID();
-    const { data, error } = await supabase.from('public_song_list_shares').upsert({
-      user_id: account.id,
-      share_id: shareId,
-      display_name: userDisplayName(account),
-      songs: publicSongSnapshot(list)
-    }, { onConflict: 'user_id' }).select('share_id').single();
-    if (error) throw error;
-    return data.share_id;
-  }
-
   async function loadSongsForCurrentUser() {
     const generation = ++loadGeneration;
-    const account = user;
+    const accountId = user?.id;
+    if (!sharedListMode && !accountId) { loadState = 'idle'; render(); return; }
+    if (dirty || saving) { announce('未保存の変更を保存または書き出してから再読み込みしてください。'); return; }
+    loadState = 'loading';
+    setSyncState('読み込み中', 'warn'); render();
     try {
-      if (sharedListMode) {
-        await loadSharedList();
-      } else if (account && supabase) {
-        setSyncState('個人リストを読み込み中', 'warn');
-        let { data, error } = await supabase.from('song_lists').select('songs').eq('user_id', account.id).maybeSingle();
+      if (sharedListMode) await loadSharedList();
+      else {
+        const { data, error } = await supabase.rpc('get_my_song_list');
         if (error) throw error;
-        if (generation !== loadGeneration) return;
-        songs = Array.isArray(data?.songs) ? data.songs.map(normalizeSong) : [];
-        setSyncState(data ? '自分のリストを読み込みました' : 'リストはまだ空です', 'ok');
-        if (data && generation === loadGeneration && user?.id === account.id) {
-          try { await syncUserShare(songs, false, account); }
-          catch (shareError) { console.error('Existing viewer snapshot could not be refreshed', shareError); }
-        }
-      } else if (!sharedListMode) {
-        songs = [];
-        $('#auth-gate').classList.remove('hidden');
-        $('#app-shell').classList.add('hidden');
-        setSyncState('ログインしてください', '');
+        if (generation !== loadGeneration || user?.id !== accountId) return;
+        if (!data || !Array.isArray(data.songs) || !Number.isSafeInteger(data.revision)) throw new Error('Invalid server response');
+        songs = data.songs.map(normalizeSong);
+        baseSongs = structuredClone(songs); revision = data.revision; shareRecord = data.share;
+        try { pendingDrafts = drafts.list(accountId).filter((d) => d.draftId !== draftId); }
+        catch (_) { storageError = true; }
       }
-    } catch (error) {
-      console.error('Song list could not be loaded', error);
       if (generation !== loadGeneration) return;
-      songs = [];
-      const listName = sharedListMode ? '閲覧用リスト' : '個人リスト';
-      setSyncState(listName + 'の読み込みに失敗しました', 'warn');
-      announce(listName + 'を読み込めませんでした。時間をおいて再度お試しください。');
+      loadState = 'ready';
+      setSyncState(sharedListMode ? '閲覧用リスト' : '保存済み', 'ok');
+    } catch (error) {
+      if (generation !== loadGeneration) return;
+      console.error('List load failed', error);
+      loadState = 'error';
+      setSyncState('読み込みに失敗', 'warn');
     }
-    if (generation !== loadGeneration) return;
-    $('#setup-notice').classList.toggle('hidden', Boolean(config.supabaseUrl && config.supabaseAnonKey));
-    updateListTitle();
-    render();
+    updateListTitle(); render();
   }
 
   function normalizeSong(song, index) {
@@ -383,35 +403,60 @@
     };
   }
 
-  async function persistSongs() {
-    const snapshot = JSON.stringify(songs);
-    const accountId = user && user.id;
-    if (!accountId || !supabase) {
-      announce('保存するにはログインしてください。');
-      return Promise.reject(new Error('An authenticated account is required to save a song list.'));
-    }
-    writeChain = writeChain.catch(() => undefined).then(async () => {
-      setSyncState('個人リストに保存しています', 'warn');
-      const { error } = await supabase.from('song_lists').upsert({ user_id: accountId, songs: JSON.parse(snapshot) }, { onConflict: 'user_id' });
-      if (error) throw error;
+  function persistSongs() {
+    if (!personalView() || loadState !== 'ready' || pendingDrafts.length || conflictState) return Promise.resolve(false);
+    if (saveTask) return saveTask;
+    if (!dirty) return Promise.resolve(true);
+    const accountId = user.id;
+    saveTask = (async () => {
+      saving = true; updateDataUi();
       try {
-        await syncUserShare(JSON.parse(snapshot), false);
-      } catch (shareError) {
-        console.error('Shared view could not be updated', shareError);
-        announce('リストは保存しましたが、閲覧用リンクの更新に失敗しました。');
+        while (dirty && user?.id === accountId && !conflictState) {
+          const savedStamp = stamp;
+          const snapshot = structuredClone(songs);
+          const { data, error } = await supabase.rpc('save_my_song_list', { p_songs: orderedSongs(snapshot), p_expected_revision: revision });
+          if (error) throw error;
+          if (user?.id !== accountId) return false;
+          if (!data || !Number.isSafeInteger(data.revision)) throw new Error('Invalid save response');
+          if (!data.ok) {
+            const remote = data.songs.map(normalizeSong);
+            const merge = Core.mergeSongs(baseSongs, songs, remote);
+            if (merge.conflicts.length) {
+              conflictState = { merge, remote, revision: data.revision };
+              showConflicts(); return false;
+            }
+            baseSongs = remote; revision = data.revision; songs = merge.songs.map(normalizeSong);
+            dirty = !sameSongs(songs, baseSongs); stamp++;
+            if (dirty) storeDraft(songs); else finishDraft(accountId);
+            render();
+            continue;
+          }
+          revision = data.revision; baseSongs = snapshot;
+          if (stamp === savedStamp) { dirty = false; finishDraft(accountId); }
+          else storeDraft(songs);
+        }
+        return !dirty;
+      } catch (error) {
+        console.error('List save failed', error);
+        announce('保存できませんでした。変更はこの端末に保持しています。「再送」で保存できます。');
+        return false;
+      } finally {
+        saving = false; saveTask = null;
+        if (user?.id === accountId) {
+          setSyncState(dirty ? '未保存の変更あり' : '保存済み', dirty ? 'warn' : 'ok');
+          updateDataUi();
+        } else if (dirty) { setTimeout(() => void persistSongs(), 0); }
       }
-      setSyncState('自分のリストに保存しました', 'ok');
-    }).catch((error) => {
-      console.error('Song list could not be saved', error);
-      setSyncState('Supabaseへの保存に失敗しました', 'warn');
-      announce('保存に失敗しました。接続設定を確認して再度お試しください。');
-      throw error;
-    });
-    return writeChain;
+    })();
+    return saveTask;
   }
 
   function openSongDialog(song, defaults = {}) {
+    if (!canMutate()) return;
     const editing = Boolean(song);
+    $('#duplicate-hint').classList.add('hidden');
+    $('#artist-picker').value = '';
+    fillArtistPicker();
     $('#song-dialog-title').textContent = editing ? '曲を編集' : defaults.artist ? '同じアーティストに曲を追加' : '曲を追加';
     const artistContext = $('#artist-context');
     artistContext.classList.toggle('hidden', editing || !defaults.artist);
@@ -429,7 +474,8 @@
     $('#song-visible').checked = editing ? song.visible : true;
     $('#form-error').classList.add('hidden');
     $('#song-dialog').showModal();
-    if (defaults.artist && !editing) $('#song-reading').focus();
+    if (defaults.artist && !editing) $('#song-title').focus();
+    else $('#artist-name').focus();
   }
 
   function showError(element, message) {
@@ -439,6 +485,7 @@
 
   async function saveSong(event) {
     event.preventDefault();
+    if (!canMutate()) return;
     const id = $('#song-id').value;
     const artist = $('#artist-name').value.trim();
     const title = $('#song-title').value.trim();
@@ -450,7 +497,7 @@
       return;
     }
     const song = normalizeSong({
-      id: id || 'song-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      id: id || crypto.randomUUID(),
       artistKana, artist, songKana: songKana || (previous && title === previous.title ? previous.songKana : ''), title,
       key: $('#song-key').value,
       transpose: $('#transpose-value').value,
@@ -459,13 +506,19 @@
       visible: $('#song-visible').checked,
       extra: previous ? previous.extra : {}
     });
-    if (previous) songs = songs.map((item) => item.id === id ? song : item);
-    else songs.push(song);
+    const duplicate = songs.find((item) => item.id !== id && songIdentity(item) === songIdentity(song));
+    if (duplicate) {
+      $('#duplicate-hint').classList.remove('hidden');
+      $('#duplicate-edit').dataset.id = duplicate.id;
+      showError($('#form-error'), '同じアーティスト・曲名が登録済みです。既存の曲を編集してください。別バージョンは曲名に区別を付けて登録できます。');
+      return;
+    }
+    const next = previous ? songs.map((item) => item.id === id ? song : item) : [...songs, song];
+    if (!commitSongs(next)) return;
     render();
     $('#song-dialog').close();
     try {
-      await persistSongs();
-      announce(previous ? '曲の内容を更新しました。' : '曲を追加しました。');
+      if (await persistSongs()) announce(previous ? '曲の内容を更新しました。' : '曲を追加しました。');
     } catch (_) { /* The local backup is retained when remote saving fails. */ }
   }
 
@@ -474,37 +527,27 @@
     if (!button) return;
     const action = button.dataset.action;
     const song = songs.find((item) => item.id === button.dataset.id);
-    if (action === 'add-artist') {
-      if (personalView() && song) openSongDialog(null, { artist: song.artist, artistKana: song.artistKana });
+    if (!song) return;
+    if (action === 'chord-search') {
+      window.open('https://www.google.com/search?q=' + encodeURIComponent(song.artist + ' ' + song.title + ' Chordwiki'), '_blank', 'noopener,noreferrer');
       return;
     }
-    if (!song) return;
-    if (action === 'edit') openSongDialog(song);
-    if (action === 'chord-search') {
-      const query = encodeURIComponent(song.artist + ' ' + song.title + ' Chordwiki');
-      window.open('https://www.google.com/search?q=' + query, '_blank', 'noopener,noreferrer');
-    }
-    if (action === 'toggle-visible') {
-      song.visible = !song.visible;
-      render();
-      try { await persistSongs(); announce(song.visible ? '一覧に表示しました。' : '一覧から非表示にしました。'); } catch (_) { /* Local backup remains available. */ }
-    }
+    if (!canMutate()) return;
+    if (action === 'add-artist') return openSongDialog(null, { artist: song.artist, artistKana: song.artistKana });
+    if (action === 'edit') return openSongDialog(song);
+    let next = songs;
     if (action === 'delete') {
       if (!window.confirm('「' + song.artist + ' / ' + song.title + '」を削除しますか？')) return;
-      songs = songs.filter((item) => item.id !== song.id);
-      render();
-      try { await persistSongs(); announce('曲を削除しました。'); } catch (_) { /* Local backup remains available. */ }
+      next = songs.filter((item) => item.id !== song.id);
+    } else {
+      const updated = { ...song };
+      if (action === 'toggle-visible') updated.visible = !song.visible;
+      else if (action === 'sung') updated.lastSung = localDate();
+      else if (action === 'transpose') updated.transpose = Math.max(-24, Math.min(24, song.transpose + Number(button.dataset.delta)));
+      else return;
+      next = songs.map((item) => item.id === song.id ? updated : item);
     }
-    if (action === 'sung') {
-      song.lastSung = localDate();
-      render();
-      try { await persistSongs(); announce('最後に歌った日を今日にしました。'); } catch (_) { /* Local backup remains available. */ }
-    }
-    if (action === 'transpose') {
-      song.transpose = Math.max(-24, Math.min(24, Number(song.transpose || 0) + Number(button.dataset.delta)));
-      render();
-      try { await persistSongs(); } catch (_) { /* Local backup remains available. */ }
-    }
+    if (commitSongs(next)) await persistSongs();
   }
 
   function setAuthMode(mode) {
@@ -528,28 +571,35 @@
     $('#auth-error').classList.add('hidden');
     $('#auth-message').classList.add('hidden');
     if (!supabase) {
-      showError($('#auth-error'), 'Supabaseの接続設定がありません。READMEの初回設定を完了してください。');
+      showError($('#auth-error'), '現在接続できません。通信状態を確認して再度お試しください。');
       return;
     }
     const email = $('#auth-email').value.trim();
     const password = $('#auth-password').value;
     if (!$('#auth-form').reportValidity()) return;
+    if (authBusy) return;
+    authBusy = true; $('#auth-submit-button').disabled = true;
+    try {
     const result = signUp
       ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: new URL(window.location.pathname, window.location.origin).toString() } })
       : await supabase.auth.signInWithPassword({ email, password });
     if (result.error) {
-      showError($('#auth-error'), result.error.message);
+      showError($('#auth-error'), authErrorMessage(result.error));
       return;
     }
     if (signUp && !result.data.session) {
-      $('#auth-message').textContent = '確認メールを送信しました。メール内のリンクを開いて登録を完了したあと、ここからログインしてください。届かない場合は迷惑メールとSupabaseのメール送信設定をご確認ください。';
+      $('#auth-message').textContent = '確認メールを送信しました。メール内のリンクで登録を完了してください。届かない場合は迷惑メールを確認し、下の「確認メールを再送」をお試しください。';
       $('#auth-message').classList.remove('hidden');
       return;
     }
-    user = result.data.user || (result.data.session && result.data.session.user);
+    const signedInUser = result.data.user || result.data.session?.user;
+    const alreadyLoading = user?.id === signedInUser?.id && (loadState === 'loading' || loadState === 'ready');
+    user = signedInUser;
     updateAccessUi();
-    await loadSongsForCurrentUser();
+    if (!alreadyLoading) await loadSongsForCurrentUser();
     announce('ログインしました。自分専用のリストを表示しています。');
+    } catch (error) { showError($('#auth-error'), '通信に失敗しました。時間をおいて再度お試しください。'); }
+    finally { authBusy = false; $('#auth-submit-button').disabled = false; }
   }
 
   function openProfileDialog() {
@@ -571,7 +621,11 @@
     user = result.data.user;
     updateListTitle();
     $('#profile-dialog').close();
-    try { await syncUserShare(songs, false); } catch (error) { console.error('Shared display name could not be updated', error); }
+    if (shareRecord) {
+      const { data, error } = await supabase.rpc('manage_my_song_share', { p_action: 'rename', p_display_name: name });
+      if (error) return announce('自分の表示名は保存しました。共有名は「共有設定」で更新してください。');
+      shareRecord = data;
+    }
     announce('表示名を更新しました。');
   }
 
@@ -596,6 +650,7 @@
 
   async function deleteAccount() {
     if (!user || !supabase) return;
+    if (saving) return announce('保存が完了してからアカウントを削除してください。');
     const confirmation = 'アカウントと曲リストを削除します。元に戻せません。続けますか？';
     if (!window.confirm(confirmation)) return;
     $('#delete-account-error').classList.add('hidden');
@@ -608,6 +663,8 @@
       showError($('#delete-account-error'), 'アカウントを削除できませんでした。管理者にお問い合わせください。');
       return;
     }
+    for (const draft of drafts.list(user.id)) drafts.remove(user.id, draft.draftId);
+    dirty = false; pendingDrafts = [];
     try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) { /* The account was already removed. */ }
     user = null;
     songs = [];
@@ -722,57 +779,54 @@
 
   async function processImport(event) {
     event.preventDefault();
+    if (!canMutate()) return;
+    const beforeImport = songs;
     const mode = new FormData($('#import-form')).get('import-mode');
     if (mode === 'replace') {
       if (!window.confirm('現在の' + songs.length + '曲を、CSVの' + pendingImport.length + '曲で置き換えますか？')) return;
       songs = pendingImport.map((song, index) => normalizeSong({ ...song, id: song.id || 'import-' + Date.now() + '-' + index }, index));
     } else {
-      const merged = new Map(songs.map((song) => [(song.artist + '\u0000' + song.title).toLocaleLowerCase('ja'), song]));
+      const merged = new Map(songs.map((song) => [songIdentity(song), song]));
       const claimedIds = new Set(songs.map((song) => song.id));
       pendingImport.forEach((incoming) => {
-        const key = (incoming.artist + '\u0000' + incoming.title).toLocaleLowerCase('ja');
+        const key = songIdentity(incoming);
         const current = merged.get(key);
         let newId = current && current.id;
         if (!newId && incoming.id && !claimedIds.has(incoming.id)) newId = incoming.id;
-        if (!newId) newId = 'import-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+        if (!newId) newId = crypto.randomUUID();
         claimedIds.add(newId);
         merged.set(key, normalizeSong({ ...current, ...incoming, id: newId }, merged.size));
       });
       songs = Array.from(merged.values());
     }
+    const importedSongs = songs; songs = beforeImport;
+    if (new Set(importedSongs.map((s) => s.id)).size !== importedSongs.length) return showError($('#import-error'), 'CSV内のIDが重複しています。IDを一意にするか、追加・更新を選んでください。');
+    if (!commitSongs(importedSongs)) return;
     $('#import-dialog').close();
-    render();
-    try { await persistSongs(); announce(pendingImport.length + '曲を取り込みました。'); }
+    try { if (await persistSongs()) announce(pendingImport.length + '曲を取り込みました。'); }
     catch (_) { /* A local backup is retained. */ }
     $('#import-file').value = '';
   }
 
   async function handleShare() {
-    if (!user) return announce('閲覧用リンクを作るにはログインしてください。');
-    try {
-      const shareId = await syncUserShare(songs, true);
-      const url = new URL(window.location.href);
-      url.search = '';
-      url.searchParams.set('list', shareId);
-      url.searchParams.set('sort', $('#sort-mode').value);
-      try {
-        await navigator.clipboard.writeText(url.toString());
-        announce('あなたのソングリストの閲覧用URLをコピーしました。');
-      } catch (_) {
-        window.prompt('閲覧用URLをコピーしてください', url.toString());
-      }
-    } catch (error) {
-      console.error('Personal share link could not be created', error);
-      announce('閲覧用リンクを作成できませんでした。Supabaseの設定を確認してください。');
-    }
+    if (!personalView() || loadState !== 'ready') return;
+    $('#share-name').value = shareRecord?.display_name || userDisplayName();
+    updateShareDialog();
+    $('#share-error').classList.add('hidden');
+    $('#share-dialog').showModal();
   }
 
   async function signOut() {
-    if (supabase) await supabase.auth.signOut();
-    user = null;
-    songs = [];
-    $('#show-hidden').checked = false;
-    updateAccessUi();
+    if (saving) return announce('保存が終わってからログアウトしてください。');
+    if (dirty && !window.confirm('未保存の変更はこの端末に残し、ログアウトしますか？同じアカウントでログインすると復元できます。')) return;
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      user = null; songs = []; baseSongs = []; dirty = false; pendingDrafts = []; conflictState = null;
+      loadState = 'idle'; shareRecord = null; revision = 0;
+      $('#show-hidden').checked = false;
+      updateAccessUi();
+    } catch (_) { announce('ログアウトできませんでした。再度お試しください。'); }
   }
 
   function applyUrlFilters() {
@@ -790,8 +844,9 @@
     if (sharedListMode) updateAccessUi();
     if (params.get('sort') === 'title' || params.get('sort') === 'recent') $('#sort-mode').value = params.get('sort');
     $('#add-button').addEventListener('click', () => openSongDialog(null));
+    setupUpgradeEvents();
     $('#empty-add').addEventListener('click', () => { if (personalView()) openSongDialog(null); });
-    const clearSearch = () => { $('#search-input').value = ''; render(); $('#search-input').focus(); };
+    const clearSearch = () => { $('#search-input').value = ''; $('#artist-filter').value = ''; pageLimit = 100; render(); $('#search-input').focus(); };
     $('#search-clear').addEventListener('click', clearSearch);
     $('#empty-clear').addEventListener('click', clearSearch);
     $('#search-input').addEventListener('keydown', (event) => { if (event.key === 'Escape') clearSearch(); });
@@ -820,6 +875,7 @@
     $('#export-button').addEventListener('click', exportCsv);
     $('#import-button').addEventListener('click', () => $('#import-file').click());
     $('#import-file').addEventListener('change', async (event) => {
+      if (!canMutate()) return;
       const file = event.target.files && event.target.files[0];
       if (!file) return;
       try {
@@ -831,8 +887,8 @@
     });
     $('#import-form').addEventListener('submit', processImport);
     $('#share-button').addEventListener('click', handleShare);
-    $('#search-input').addEventListener('input', render);
-    $('#sort-mode').addEventListener('change', render);
+    $('#search-input').addEventListener('input', () => { pageLimit = 100; render(); });
+    $('#sort-mode').addEventListener('change', () => { pageLimit = 100; render(); });
     $('#show-hidden').addEventListener('change', render);
     document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => $('#' + button.dataset.close).close()));
     document.querySelectorAll('dialog').forEach((dialog) => dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); }));
@@ -844,6 +900,271 @@
     setAuthMode('signup');
     await initializeAuth();
     await loadSongsForCurrentUser();
+  }
+
+  function sameSongs(a, b) {
+    const normalize = (list) => list.map(Core.clean).sort((x, y) => x.id.localeCompare(y.id));
+    return Core.equal(normalize(a), normalize(b));
+  }
+  function songIdentity(song) { return Core.identity(song.artist) + '\u0000' + Core.identity(song.title); }
+  function orderedSongs(list) {
+    const snapshot = publicSongSnapshot(list.map((song) => ({ ...song, visible: true })));
+    const indexes = new Map(snapshot.map((song) => [song.id, song]));
+    return list.map((song) => ({ ...song, artistSortIndex: indexes.get(song.id).artistSortIndex, titleSortIndex: indexes.get(song.id).titleSortIndex }));
+  }
+  function canMutate(notify = true) {
+    const allowed = personalView() && loadState === 'ready' && !pendingDrafts.length && !conflictState;
+    if (!allowed && notify) announce('読み込み・下書きの復元・変更の確認を完了してから編集してください。');
+    return allowed;
+  }
+  function storeDraft(next) {
+    drafts.write(user.id, draftId, { revision, baseSongs, songs: next, stamp });
+    storageError = false;
+  }
+  function commitSongs(next) {
+    if (!canMutate()) return false;
+    stamp++;
+    try { storeDraft(next); }
+    catch (_) {
+      storageError = true; updateDataUi();
+      announce('この端末に変更を保持できないため、編集を止めました。保存済みデータをCSVに書き出し、ブラウザーの空き容量や保存設定を確認してください。');
+      return false;
+    }
+    songs = next; dirty = true; render();
+    return true;
+  }
+  function finishDraft(accountId) {
+    try {
+      drafts.remove(accountId, draftId);
+      if (restoreSource) drafts.remove(accountId, restoreSource.draftId, restoreSource.stamp);
+      restoreSource = null;
+      pendingDrafts = drafts.list(accountId).filter((item) => item.draftId !== draftId);
+    } catch (_) { storageError = true; }
+  }
+  function updateDataUi() {
+    const personal = personalView();
+    const panel = $('#data-status');
+    let message = '';
+    if (loadState === 'loading') message = 'リストを読み込んでいます。完了するまで編集できません。';
+    else if (loadState === 'error') message = sharedListMode ? 'リストを読み込めません。通信状態を確認してください。リンクが停止・変更された場合も表示されません。' : '読み込みに失敗しました。既存データを守るため、編集を停止しています。';
+    else if (conflictState) message = '別の端末と同じ項目を変更しました。残す内容を選んでください。未保存の変更は端末に保持しています。';
+    else if (pendingDrafts.length) message = 'この端末に未保存の下書きがあります。復元するか、CSVで内容を確認できます。';
+    else if (storageError) message = '端末への下書き保存を確認できません。ブラウザーの空き容量・保存設定を確認してください。';
+    else if (dirty) message = saving ? '保存しています。変更はこの端末にも保持しています。' : '未保存の変更があります。この端末に保持中です。通信が戻ったら「再送」を押してください。';
+    panel.classList.toggle('hidden', !message || (!personal && loadState !== 'error' && loadState !== 'loading'));
+    $('#data-status-message').textContent = message;
+    $('#reload-list').classList.toggle('hidden', loadState !== 'error');
+    $('#retry-save').classList.toggle('hidden', !personal || !dirty || saving || Boolean(conflictState) || pendingDrafts.length > 0);
+    $('#review-conflicts').classList.toggle('hidden', !conflictState);
+    $('#draft-actions').classList.toggle('hidden', !personal || !pendingDrafts.length);
+    const picker = $('#draft-select');
+    const previous = picker.value;
+    picker.innerHTML = pendingDrafts.map((draft) => '<option value="' + escapeHtml(draft.draftId) + '">' + escapeHtml(new Date(draft.updatedAt).toLocaleString('ja-JP')) + '・' + draft.songs.length + '曲</option>').join('');
+    if (pendingDrafts.some((d) => d.draftId === previous)) picker.value = previous;
+    document.querySelectorAll('#add-button,#empty-add,#import-button,#artist-manage-button,#save-song-button,[data-action]:not([data-action="chord-search"])').forEach((el) => { el.disabled = !canMutate(false); });
+    $('#export-button').disabled = loadState !== 'ready';
+    $('#share-button').disabled = loadState !== 'ready' || dirty || saving || pendingDrafts.length > 0;
+    $('#sharing-status').textContent = shareRecord?.enabled ? '共有中' : '共有停止中';
+    if (personal && loadState === 'ready') setSyncState(conflictState ? '変更の確認が必要' : saving ? '保存中' : dirty ? '未保存の変更あり' : '保存済み', dirty || conflictState ? 'warn' : 'ok');
+  }
+  function selectedDraft() { return pendingDrafts.find((d) => d.draftId === $('#draft-select').value); }
+  function downloadSongs(list, suffix = '') {
+    const headers = ['ID','アーティスト名の読み仮名','アーティスト名','曲名の読み仮名','曲名','原曲キー','自分が歌うキー（移調）','最後に歌った日','備考','一覧に表示','追加データ(JSON)'];
+    const rows = [headers, ...list.map((s) => [s.id,s.artistKana,s.artist,s.songKana,s.title,s.key,s.transpose,s.lastSung,s.notes,s.visible ? 'true' : 'false',JSON.stringify(s.extra || {})])];
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + rows.map((row) => row.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'songlist-' + localDate() + suffix + '.csv'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function restoreDraft() {
+    const draft = selectedDraft(); if (!draft || loadState !== 'ready') return;
+    const merge = Core.mergeSongs(draft.baseSongs.map(normalizeSong), draft.songs.map(normalizeSong), baseSongs);
+    restoreSource = draft; pendingDrafts = [];
+    if (merge.conflicts.length) {
+      conflictState = { merge, remote: baseSongs, revision }; showConflicts(); updateDataUi(); return;
+    }
+    stamp++;
+    try { storeDraft(merge.songs); } catch (_) { pendingDrafts = [draft]; storageError = true; updateDataUi(); return; }
+    songs = merge.songs.map(normalizeSong); dirty = !sameSongs(songs, baseSongs);
+    if (!dirty) finishDraft(user.id);
+    render(); if (dirty) await persistSongs();
+  }
+  const fieldNames = { artist:'アーティスト名', artistKana:'アーティストの読み', title:'曲名', songKana:'曲名の読み', key:'原曲キー', transpose:'移調', lastSung:'最後に歌った日', notes:'備考', visible:'閲覧用への表示', extra:'追加情報', $song:'曲の追加・削除' };
+  function conflictValue(value) {
+    if (value === undefined) return '削除';
+    if (typeof value === 'boolean') return value ? '表示' : '非表示';
+    if (value && typeof value === 'object') return value.title ? value.artist + ' / ' + value.title : JSON.stringify(value);
+    return String(value || '未設定');
+  }
+  function showConflicts() {
+    if (!conflictState) return;
+    $('#conflict-items').innerHTML = conflictState.merge.conflicts.map((c, i) => '<fieldset class="conflict-item"><legend>' + escapeHtml(c.label + '：' + fieldNames[c.field]) + '</legend><label><input type="radio" name="conflict-' + i + '" value="remote" checked><span>他の端末：' + escapeHtml(conflictValue(c.remote)) + '</span></label><label><input type="radio" name="conflict-' + i + '" value="local"><span>この端末：' + escapeHtml(conflictValue(c.local)) + '</span></label></fieldset>').join('');
+    if (!$('#conflict-dialog').open) $('#conflict-dialog').showModal();
+  }
+  async function resolveConflicts(event) {
+    event.preventDefault(); if (!conflictState) return;
+    const current = conflictState;
+    const choices = current.merge.conflicts.map((_, i) => document.querySelector('input[name="conflict-' + i + '"]:checked').value);
+    const next = Core.resolveMerge(current.merge, choices).map(normalizeSong);
+    const oldBase = baseSongs, oldRevision = revision;
+    baseSongs = current.remote; revision = current.revision; stamp++;
+    try { storeDraft(next); } catch (_) { baseSongs = oldBase; revision = oldRevision; storageError = true; updateDataUi(); return; }
+    songs = next; dirty = !sameSongs(songs, baseSongs); conflictState = null;
+    $('#conflict-dialog').close();
+    if (!dirty) finishDraft(user.id);
+    render(); if (dirty) await persistSongs();
+  }
+  function updateArtistOptions() {
+    const visible = personalView() ? songs : songs.filter((s) => s.visible);
+    const artists = [...new Set(visible.map((song) => song.artist))].sort((a, b) => collator.compare(songs.find((s) => s.artist === a)?.artistKana || a, songs.find((s) => s.artist === b)?.artistKana || b));
+    const select = $('#artist-filter'), selected = select.value;
+    const markup = '<option value="">全アーティスト</option>' + artists.map((name) => '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>').join('');
+    if (select.innerHTML !== markup) { select.innerHTML = markup; if (artists.includes(selected)) select.value = selected; }
+  }
+  function fillArtistPicker() {
+    const artists = [...new Map(songs.map((s) => [s.artist, s])).values()].sort((a,b) => collator.compare(a.artistKana || a.artist,b.artistKana || b.artist));
+    $('#artist-options').innerHTML = artists.map((s) => '<option value="' + escapeHtml(s.artist) + '">' + escapeHtml(s.artistKana) + '</option>').join('');
+  }
+  function chooseArtist() {
+    const song = songs.find((s) => Core.identity(s.artist) === Core.identity($('#artist-picker').value));
+    if (!song) return;
+    $('#artist-name').value = song.artist; $('#artist-reading').value = song.artistKana;
+    $('#artist-context').textContent = '「' + song.artist + '」の名前・読み仮名を入力しました。';
+    $('#artist-context').classList.remove('hidden');
+  }
+  function openArtistManager() {
+    if (!canMutate()) return;
+    const names = [...new Set(songs.map((song) => song.artist))].sort(collator.compare);
+    $('#artist-source').innerHTML = names.map((name) => '<option>' + escapeHtml(name) + '</option>').join('');
+    populateArtistManager(); $('#artist-manage-dialog').showModal();
+  }
+  function populateArtistManager() {
+    const matching = songs.filter((s) => s.artist === $('#artist-source').value);
+    $('#artist-new-name').value = matching[0]?.artist || '';
+    $('#artist-new-reading').value = matching[0]?.artistKana || '';
+    $('#artist-bulk-count').textContent = matching.length + '曲をまとめて更新します。';
+    $('#artist-bulk-error').classList.add('hidden');
+  }
+  async function saveArtistManager(event) {
+    event.preventDefault(); if (!canMutate()) return;
+    const source = $('#artist-source').value, artist = $('#artist-new-name').value.trim(), kana = normalizeReading($('#artist-new-reading').value);
+    if (!artist || !kana) return;
+    const next = songs.map((s) => s.artist === source ? { ...s, artist, artistKana: kana } : s);
+    const identities = next.map(songIdentity);
+    if (new Set(identities).size < identities.length && next.some((s,i) => s.artist === artist && identities.indexOf(identities[i]) !== i)) return showError($('#artist-bulk-error'), '更新すると同じアーティスト・曲名が重複します。先に該当曲を整理してください。');
+    if (!window.confirm('「' + source + '」の' + songs.filter((s) => s.artist === source).length + '曲を更新しますか？')) return;
+    if (commitSongs(next)) { $('#artist-manage-dialog').close(); await persistSongs(); }
+  }
+  function songCard(song) {
+    const key = sungKey(song), relative = parallelKey(key);
+    const personal = personalView();
+    const button = (action, label, delta = '') => '<button type="button" class="button button-outline" data-action="' + action + '" data-id="' + escapeHtml(song.id) + '"' + (delta ? ' data-delta="' + delta + '"' : '') + '>' + label + '</button>';
+    const fullKey = '<span class="key-chip">(' + signed(song.transpose) + ')</span> <span>' + escapeHtml(song.key || '未設定') + '</span> → <span class="key-chip">' + escapeHtml(key || '—') + '</span> / <span class="parallel-chip">' + escapeHtml(relative || '—') + '</span>';
+    return '<details class="song-card' + (!song.visible ? ' is-hidden-song' : '') + '" data-song-id="' + escapeHtml(song.id) + '"><summary><span class="card-title">' + escapeHtml(song.title) + '</span><span class="card-artist">' + escapeHtml(song.artist) + (!song.visible ? '・非表示' : '') + '</span><span class="card-key">' + fullKey + '</span><span class="card-chevron" aria-hidden="true">⌄</span></summary><div class="card-details">' +
+      (personal ? '<p class="card-reading">読み：' + escapeHtml(song.artistKana + ' / ' + song.songKana) + '</p><div class="card-transpose">' + button('transpose','− 半音下げる','-1') + button('transpose','＋ 半音上げる','1') + '</div>' : '') +
+      '<p>最後に歌った日：' + escapeHtml(formatDate(song.lastSung)) + '</p>' +
+      (personal ? '<p class="card-notes">備考：' + escapeHtml(song.notes || '未入力') + '</p>' : '') +
+      '<div class="card-actions">' + button('chord-search','コード譜を検索') + (personal ? button('sung','今日歌った') + button('edit','編集') + button('add-artist','同じ歌手の曲を追加') + button('toggle-visible',song.visible ? '閲覧用から非表示' : '閲覧用に表示') + button('delete','削除') : '') + '</div></div></details>';
+  }
+  function updateShareDialog() {
+    $('#share-state').textContent = shareRecord?.enabled ? '共有中' : '共有停止中';
+    $('#share-description').textContent = '「表示する」が有効な ' + songs.filter((s) => s.visible).length + ' 曲と表示名を共有します。備考・非表示曲は共有しません。リンクを知る人はログインせずに閲覧・検索できます。';
+    $('#share-enable').textContent = shareRecord?.enabled ? '表示名を保存してURLをコピー' : '共有を開始してURLをコピー';
+    $('#share-stop').disabled = !shareRecord?.enabled;
+    $('#share-rotate').disabled = !shareRecord;
+    $('#share-url').value = shareRecord ? viewerUrl(shareRecord.share_id) : '';
+  }
+  function viewerUrl(id) {
+    const url = new URL(window.location.pathname, window.location.origin);
+    url.searchParams.set('list', id); url.searchParams.set('sort', $('#sort-mode').value); return url.toString();
+  }
+  async function manageShare(action) {
+    if (!personalView() || loadState !== 'ready' || dirty || saving) return;
+    const name = $('#share-name').value.trim();
+    if (action !== 'stop' && !name) return showError($('#share-error'), '共有する表示名を入力してください。');
+    if (action === 'rotate' && !window.confirm('閲覧用URLを作り直します。以前のURLは使えなくなります。続けますか？')) return;
+    $('#share-error').classList.add('hidden');
+    $('#share-dialog').querySelectorAll('button[data-share-action]').forEach((el) => { el.disabled = true; });
+    try {
+      const { data, error } = await supabase.rpc('manage_my_song_share', { p_action: action, p_display_name: name || null });
+      if (error) throw error;
+      shareRecord = data; updateShareDialog(); updateDataUi();
+      if (action === 'enable' || action === 'rotate') {
+        try { await navigator.clipboard.writeText(viewerUrl(data.share_id)); announce('閲覧用URLをコピーしました。'); }
+        catch (_) { $('#share-url').focus(); $('#share-url').select(); announce('URL欄を選択しました。コピーしてお使いください。'); }
+      } else announce('閲覧用リンクを停止しました。');
+    } catch (_) { showError($('#share-error'), '共有設定を保存できませんでした。現在の状態を変えずに、時間をおいて再度お試しください。'); }
+    finally { $('#share-enable').disabled = false; updateShareDialog(); }
+  }
+  function authErrorMessage(error) {
+    const text = String(error?.message || '').toLowerCase();
+    if (text.includes('invalid login')) return 'メールアドレスまたはパスワードが正しくありません。';
+    if (text.includes('email not confirmed')) return 'メールの確認が完了していません。「確認メールを再送」をお試しください。';
+    if (text.includes('rate') || error?.status === 429) return '送信が集中しています。しばらく待ってから再度お試しください。';
+    if (text.includes('already registered')) return '登録済みの可能性があります。ログインまたはパスワードの再設定をお試しください。';
+    return '手続きを完了できませんでした。入力内容を確認し、時間をおいて再度お試しください。';
+  }
+  async function sendAccountMail(kind) {
+    const email = $('#auth-email').value.trim();
+    if (!$('#auth-email').reportValidity() || !email || !supabase || authBusy) return;
+    if (Date.now() < mailCooldown) return showError($('#auth-error'), '再送信まで1分ほどお待ちください。');
+    authBusy = true; $('#auth-error').classList.add('hidden');
+    $('#password-reset-button').disabled = true; $('#resend-confirmation-button').disabled = true;
+    try {
+      const redirect = new URL(window.location.pathname, window.location.origin).toString();
+      const { error } = kind === 'reset' ? await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirect }) : await supabase.auth.resend({ type:'signup',email,options:{emailRedirectTo:redirect} });
+      if (error) throw error;
+      mailCooldown = Date.now() + 60000;
+      $('#auth-message').textContent = kind === 'reset' ? '該当するアカウントがある場合、パスワード再設定メールが届きます。メールのリンクを開いて新しいパスワードを設定してください。' : '確認メールの再送を受け付けました。受信箱と迷惑メールをご確認ください。';
+      $('#auth-message').classList.remove('hidden');
+    } catch (error) { showError($('#auth-error'), authErrorMessage(error)); }
+    finally { authBusy = false; $('#password-reset-button').disabled = false; $('#resend-confirmation-button').disabled = false; }
+  }
+  async function saveRecoveryPassword(event) {
+    event.preventDefault();
+    if (!user || !supabase) return showError($('#recovery-error'), 'リンクの期限が切れている可能性があります。ログイン画面から再設定メールを送り直してください。');
+    const password = $('#recovery-password').value;
+    if (password !== $('#recovery-confirm').value) return showError($('#recovery-error'), '確認用パスワードが一致しません。');
+    $('#recovery-submit').disabled = true;
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      $('#recovery-form').reset(); recoveryMode = false;
+      history.replaceState(null, '', window.location.pathname);
+      updateAccessUi(); await loadSongsForCurrentUser(); announce('パスワードを再設定しました。');
+    } catch (error) { showError($('#recovery-error'), authErrorMessage(error)); }
+    finally { $('#recovery-submit').disabled = false; }
+  }
+  function setupUpgradeEvents() {
+    $('#reload-list').addEventListener('click', loadSongsForCurrentUser);
+    $('#retry-save').addEventListener('click', persistSongs);
+    $('#review-conflicts').addEventListener('click', showConflicts);
+    $('#restore-draft').addEventListener('click', restoreDraft);
+    $('#download-draft').addEventListener('click', () => { const d = selectedDraft(); if (d) downloadSongs(d.songs,'-未保存'); });
+    $('#discard-draft').addEventListener('click', () => {
+      const d = selectedDraft();
+      if (!d || !window.confirm('選択した端末内の下書きを削除し、サーバーの保存済みデータを使いますか？必要なら先に下書きCSVを書き出してください。')) return;
+      try { drafts.remove(user.id,d.draftId,d.stamp); pendingDrafts = drafts.list(user.id).filter((d) => d.draftId !== draftId); }
+      catch (_) { storageError = true; }
+      render();
+    });
+    $('#conflict-form').addEventListener('submit', resolveConflicts);
+    $('#mobile-song-list').addEventListener('click', handleListAction);
+    $('#artist-filter').addEventListener('change', () => { pageLimit = 100; render(); });
+    $('#load-more').addEventListener('click', () => { pageLimit += 100; render(); });
+    $('#artist-picker').addEventListener('input', chooseArtist);
+    $('#duplicate-edit').addEventListener('click', () => openSongDialog(songs.find((s) => s.id === $('#duplicate-edit').dataset.id)));
+    $('#artist-manage-button').addEventListener('click', openArtistManager);
+    $('#artist-source').addEventListener('change', populateArtistManager);
+    $('#artist-bulk-form').addEventListener('submit', saveArtistManager);
+    $('#share-enable').addEventListener('click', () => manageShare('enable'));
+    $('#share-stop').addEventListener('click', () => manageShare('stop'));
+    $('#share-rotate').addEventListener('click', () => manageShare('rotate'));
+    $('#password-reset-button').addEventListener('click', () => sendAccountMail('reset'));
+    $('#resend-confirmation-button').addEventListener('click', () => sendAccountMail('signup'));
+    $('#recovery-form').addEventListener('submit', saveRecoveryPassword);
+    $('#recovery-back').addEventListener('click', () => { recoveryMode = false; history.replaceState(null,'',window.location.pathname); updateAccessUi(); });
+    window.addEventListener('beforeunload', (event) => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });
+    window.addEventListener('online', () => { if (dirty && !conflictState) void persistSongs(); });
   }
 
   start();

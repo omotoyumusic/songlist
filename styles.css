@@ -188,3 +188,129 @@ button:disabled { cursor: wait; opacity: .6; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Compact library, durable save notices and usable touch controls. */
+.overview { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 24px; margin-bottom: 18px; }
+.stat-card { min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; gap: 8px; }
+.stat-icon, .stat-caption { display: none; }
+.stat-card > div:not(.stat-icon) { display: flex; align-items: baseline; gap: 8px; }
+.stat-label { font-size: 12px; }
+.stat-value strong { font-size: 22px; }
+.overview-share { display: flex; flex-direction: row; align-items: center; gap: 10px; margin-left: auto; padding: 0; }
+.panel-heading { min-height: 0; padding: 20px 24px 16px; gap: 12px; }
+.panel-eyebrow { display: none; }
+.panel-heading h2 { font-size: 20px; }
+.panel-actions { flex-wrap: wrap; }
+.button { min-height: 40px; }
+.data-status { margin: 0 0 16px; padding: 16px; border: 1px solid #e6d1a3; border-radius: 12px; color: #664d1e; background: #fff9e9; font-size: 13px; line-height: 1.7; }
+.data-status p { margin: 0 0 10px; }
+.data-status-actions, .draft-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.draft-actions label { display: grid; gap: 4px; }
+.draft-actions select { max-width: 100%; min-height: 40px; border: 1px solid #d7c7a8; border-radius: 6px; background: white; padding: 6px; color: #493e2b; }
+.library-controls { position: sticky; top: 0; z-index: 3; padding-top: 2px; background: #fff; border-radius: 12px 12px 0 0; }
+.toolbar { gap: 12px; padding: 0 24px 12px; flex-wrap: wrap; }
+.search-box { flex-basis: 280px; max-width: none; min-height: 44px; }
+.toolbar-filters { flex-wrap: wrap; gap: 8px; }
+.select-wrap { height: 44px; }
+.select-wrap select { font-size: 12px; max-width: 220px; }
+.artist-filter { max-width: 240px; }
+.search-help { margin: -4px 24px 10px; font-size: 11px; }
+.list-meta { min-height: 32px; padding: 0 24px; }
+.table-wrap { max-height: calc(100dvh - 285px); min-height: 160px; overflow: auto; scrollbar-gutter: stable; }
+.song-table thead { position: sticky; top: 0; z-index: 2; background: #f3f8f4; }
+.song-table td { height: 58px; }
+.row-action { width: 36px; height: 36px; flex-basis: 36px; }
+.key-nudge { width: 28px; height: 32px; }
+.song-table.owner-list col.artist { width: 16%; }
+.song-table.owner-list col.title { width: 20%; }
+.song-table.owner-list col.key { width: 25%; }
+.song-table.owner-list col.search { width: 5%; }
+.song-table.owner-list col.last { width: 10%; }
+.song-table.owner-list col.notes { width: 12%; }
+.song-table.owner-list col.actions { width: 12%; }
+.mobile-song-list { display: none; }
+.load-more { display: block; margin: 18px auto; }
+.auth-recovery-links { display: grid; justify-items: center; gap: 5px; margin-top: 18px; }
+.auth-recovery-links button { min-height: 40px; padding: 4px 10px; border: 0; background: none; color: #286a44; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.dialog-content { padding: 26px 29px; font-size: 13px; line-height: 1.8; }
+.share-state { font-weight: 700; color: #267448; }
+.share-dialog-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.subtle { color: #65776b; font-size: 12px; }
+.artist-picker-field { margin: 0 0 22px; padding-bottom: 18px; border-bottom: 1px solid #e1ebe4; }
+.conflict-item { min-width: 0; margin: 18px 0; padding: 12px; border: 1px solid #cedfd3; border-radius: 8px; }
+.conflict-item legend { font-size: 13px; font-weight: 600; }
+.conflict-item label { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; padding: 10px 2px; font-size: 13px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.conflict-item input { margin-top: 3px; flex-shrink: 0; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 900px) {
+  .toolbar-filters { width: 100%; }
+  .search-box { width: 100%; flex-basis: auto; }
+  .overview-share { grid-column: auto; }
+  .table-wrap { max-height: calc(100dvh - 340px); }
+}
+@media (max-width: 700px) {
+  .page-shell { width: calc(100% - 24px); padding-top: 14px; }
+  .overview { gap: 8px 18px; margin-bottom: 12px; }
+  .stat-label { font-size: 11px; }
+  .stat-value strong { font-size: 20px; }
+  .overview-share { width: 100%; justify-content: space-between; margin-left: 0; }
+  .panel-heading { padding: 16px; }
+  .panel-heading h2 { font-size: 19px; }
+  .panel-actions { width: 100%; gap: 8px; }
+  .panel-actions .button { min-height: 44px; font-size: 12px; padding: 0 12px; }
+  .panel-actions #add-button { order: -1; }
+  .toolbar { padding: 0 12px 8px; gap: 8px; }
+  .search-box { height: 46px; }
+  .toolbar-filters { gap: 6px; }
+  .select-wrap { min-width: 0; flex: 1; }
+  .select-wrap select { min-width: 0; width: 100%; max-width: 100%; padding: 0 24px 0 10px; font-size: 12px; }
+  .artist-filter { max-width: none; flex: 1.2; }
+  .check-filter { min-height: 36px; font-size: 11px; }
+  .search-help { margin: 0 12px 8px; font-size: 10px; }
+  .list-meta { padding: 6px 12px; font-size: 11px; }
+  .table-wrap { display: none; }
+  .mobile-song-list { display: block; padding: 0 12px 12px; }
+  .song-card { border-bottom: 1px solid #dfe9e2; background: #fff; }
+  .song-card:last-child { border-bottom: 0; }
+  .song-card.is-hidden-song { background: #f4f5f4; }
+  .song-card summary { position: relative; display: grid; gap: 6px; padding: 17px 26px 17px 2px; cursor: pointer; list-style: none; }
+  .song-card summary::-webkit-details-marker { display: none; }
+  .card-title { color: #203f2c; font-size: 17px; font-weight: 650; line-height: 1.55; overflow-wrap: anywhere; }
+  .card-artist { color: #526a5b; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+  .card-key { color: #415c4b; font-size: 13px; line-height: 1.7; }
+  .card-key .key-chip, .card-key .parallel-chip { font-size: 13px; padding: 3px 7px; }
+  .card-chevron { position: absolute; right: 4px; top: 22px; color: #548065; font-size: 22px; }
+  .song-card[open] .card-chevron { transform: rotate(180deg); }
+  .card-details { padding: 0 2px 18px; color: #4b6354; font-size: 13px; line-height: 1.7; }
+  .card-reading { color: #667a6d; font-size: 12px; }
+  .card-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .card-transpose, .card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .card-actions .button, .card-transpose .button { min-height: 44px; font-size: 12px; padding: 0 12px; }
+  .card-actions [data-action="delete"] { color: #a1443b; }
+  .dialog-content { padding: 22px 18px; }
+  .share-dialog-actions { flex-direction: column; }
+  .share-dialog-actions .button { min-height: 44px; }
+  .draft-actions { align-items: stretch; }
+  .draft-actions label { width: 100%; }
+  .top-actions { flex-wrap: wrap; }
+}
+
+.library-tools { position: relative; }
+.library-tools summary { min-height: 40px; display: flex; align-items: center; justify-content: center; padding: 0 14px; border: 1px solid #d8e6dc; border-radius: 8px; color: #416b50; font-size: 12px; cursor: pointer; list-style: none; }
+.library-tools summary::-webkit-details-marker { display: none; }
+.library-tools-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; min-width: 220px; display: grid; gap: 8px; padding: 12px; border: 1px solid #d8e6dc; border-radius: 10px; background: #fff; box-shadow: 0 8px 30px #123a2a20; }
+.library-tools-menu .button { width: 100%; justify-content: flex-start; }
+.library-tools-menu .check-filter { margin: 0; min-height: 40px; font-size: 12px; }
+@media (max-width: 700px) {
+  .overview { flex-wrap: nowrap; gap: 12px; }
+  .stat-card > div:not(.stat-icon) { gap: 5px; }
+  .stat-label { font-size: 10px; }
+  .overview-share { width: auto; margin-left: auto; }
+  .overview-share .share-caption { display: none; }
+  .button-share { min-height: 40px; font-size: 11px; padding: 0 10px; }
+  .library-tools summary { min-height: 44px; }
+}
+
+.list-title-row { flex-wrap: wrap; }
+.list-title-row h2 { min-width: 0; overflow-wrap: anywhere; }
+.library-tools summary:focus-visible, .song-card summary:focus-visible { outline: 3px solid #8bcba0; outline-offset: 3px; }

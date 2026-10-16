@@ -12,10 +12,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261017-safe-1">
+  <link rel="stylesheet" href="styles.css?v=20261017-practice-1">
   <script src="config.js"></script>
-  <script defer src="songlist-core.js?v=20261017-safe-1"></script>
-  <script defer src="app.js?v=20261017-safe-1"></script>
+  <script defer src="songlist-core.js?v=20261017-practice-1"></script>
+  <script defer src="songlist-practice.js?v=20261017-practice-1"></script>
+  <script defer src="app.js?v=20261017-practice-1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -86,6 +87,7 @@
       <div class="panel-heading">
         <div><p class="eyebrow panel-eyebrow">YOUR LIBRARY</p><div class="list-title-row"><h2 id="list-title">マイソングリスト</h2><button id="edit-display-name-button" class="button button-outline user-only hidden" type="button">編集</button></div></div>
         <div class="panel-actions">
+          <button id="history-open-button" class="button button-outline user-only hidden" type="button">歌唱履歴</button>
           <details class="library-tools user-only hidden"><summary>管理・CSV</summary><div class="library-tools-menu">
           <button id="artist-manage-button" class="button button-outline user-only hidden" type="button">アーティスト整理</button>
           <button id="import-button" class="button button-outline user-only hidden" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>CSVを取り込む</button>
@@ -101,6 +103,7 @@
       <div class="toolbar">
         <div class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="search-input" type="search" aria-label="アーティスト名・曲名・読み仮名で検索" aria-describedby="search-help" placeholder="曲名・アーティストで検索" autocomplete="off"><button id="search-clear" class="search-clear hidden" type="button" aria-label="検索をクリア" title="検索をクリア（Esc）">×</button><kbd>⌘ K</kbd></div>
         <div class="toolbar-filters">
+          <label class="select-wrap practice-filter user-only hidden"><span class="sr-only">歌唱記録で絞り込み</span><select id="practice-filter"><option value="">すべての歌唱記録</option><option value="recent">最近30日以内に歌った</option><option value="older">90日以上歌っていない・未記録</option><option value="never">歌唱日が未記録</option></select></label>
           <label class="select-wrap artist-filter"><span class="sr-only">アーティストで絞り込み</span><select id="artist-filter" aria-label="アーティストで絞り込み"><option value="">全アーティスト</option></select></label>
           <label class="select-wrap"><span class="sr-only">並び順</span><select id="sort-mode"><option value="artist">アーティスト順</option><option value="title">曲名順</option><option value="recent">最後に歌った順</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></label>
         </div>
@@ -131,14 +134,29 @@
         <label class="field"><span>曲名の読み仮名 <em>*</em></span><input id="song-reading" maxlength="160" placeholder="例：まりーごーるど"><small>読み仮名を最初から最後まで入力してください</small></label>
         <label class="field"><span>原曲キー</span><select id="song-key"></select></label>
         <label class="field"><span>自分が歌うキー <small class="inline-hint">原曲からの移調</small></span><div class="transpose-control"><button type="button" class="step-button" id="transpose-down" aria-label="半音下げる">−</button><output id="transpose-output">0</output><button type="button" class="step-button" id="transpose-up" aria-label="半音上げる">＋</button><input id="transpose-value" type="hidden" value="0"></div></label>
+        <label class="field field-wide"><span>使うキー設定</span><select id="preset-choice"></select><small>設定を選ぶと、保存した移調に切り替わります。</small></label>
+        <details id="preset-editor" class="preset-editor field-wide"><summary>キー設定の追加・名前変更</summary><p class="subtle">「通常」「低め」「弾き語り用」などを保存できます。数値は原曲からの移調（−24〜＋24）です。</p><div class="preset-editor-head" aria-hidden="true"><span>設定名</span><span>移調</span><span></span></div><div id="preset-rows"></div><button id="preset-add" class="button button-outline" type="button">＋ キー設定を追加</button></details>
         <div class="field key-preview-field"><span>歌うキー / 平行調</span><div id="key-preview" class="key-preview"><span class="key-chip">—</span><span class="parallel-link">→</span><span class="parallel-chip">—</span></div></div>
-        <label class="field"><span>最後に歌った日</span><input id="last-sung" type="date"></label>
+        <label class="field"><span>最後に歌った日</span><input id="last-sung" type="text" readonly><small>日付の追加・修正は一覧の「歌唱履歴」から行えます。</small></label>
         <label class="field field-wide"><span>備考</span><textarea id="song-notes" rows="3" maxlength="1200" placeholder="気をつけるポイント、転調など"></textarea></label>
           <label class="visibility-toggle"><input id="song-visible" type="checkbox" checked><span class="toggle-track"><i></i></span><span><strong>閲覧用リストに表示する</strong><small>オフにすると、あなたの閲覧用URLにも表示されません</small></span></label>
       </div>
       <div id="duplicate-hint" class="hidden"><button id="duplicate-edit" class="button button-outline" type="button">登録済みの曲を編集</button></div>
       <div id="form-error" class="form-error hidden" role="alert"></div>
       <div class="modal-actions"><button class="button button-outline" type="button" data-close="song-dialog">キャンセル</button><button id="save-song-button" class="button button-green" type="submit">保存する</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="search-dialog" class="modal search-modal" aria-labelledby="search-dialog-title"><div class="dialog-content"><div class="modal-heading"><h2 id="search-dialog-title">検索先を選ぶ</h2><button class="icon-button" type="button" data-close="search-dialog" aria-label="閉じる">×</button></div><p id="search-song-name"></p><div id="search-destinations" class="search-destinations"></div><p class="subtle">検索結果を新しいタブで開きます。</p></div></dialog>
+
+  <dialog id="history-dialog" class="modal history-modal" aria-labelledby="history-dialog-title">
+    <form id="history-form">
+      <div class="modal-heading"><div><p class="eyebrow">SINGING HISTORY</p><h2 id="history-dialog-title">歌唱履歴</h2></div><button class="icon-button" type="button" data-close="history-dialog" aria-label="閉じる">×</button></div>
+      <p class="subtle">歌った日とキーを記録します。履歴とキー設定名は自分だけに表示されます。</p>
+      <div class="history-filters"><label class="field"><span>曲で絞り込み</span><select id="history-song-filter"></select></label><label class="field"><span>月で絞り込み</span><input id="history-month" type="month"></label><button id="history-clear-month" class="button button-outline" type="button">月をクリア</button></div>
+      <p id="history-summary" class="history-summary" role="status"></p><p id="history-legacy-note" class="subtle hidden">これまでの「最後に歌った日」は1回分として表示します。それ以前の回数や当時のキーは記録されていません。</p>
+      <ul id="history-records" class="history-records"></ul><button id="history-more" class="button button-outline hidden" type="button">さらに表示</button>
+      <section class="history-entry" aria-labelledby="history-entry-heading"><h3 id="history-entry-heading">記録を追加・修正</h3><div class="form-grid"><label class="field field-wide"><span>曲</span><select id="history-add-song" required></select></label><label class="field"><span>歌った日</span><input id="history-add-date" type="date" required></label><label class="field"><span>歌ったときのキー設定</span><select id="history-add-preset" required></select></label></div><p id="history-error" class="form-error hidden" role="alert"></p><div class="modal-actions"><button id="history-edit-cancel" class="button button-outline hidden" type="button">修正をやめる</button><button id="history-save" class="button button-green" type="submit">1回として記録</button></div></section>
     </form>
   </dialog>
 

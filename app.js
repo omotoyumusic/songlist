@@ -13,6 +13,10 @@
   let pendingImport = [];
   let toastTimer = 0;
   const Core = window.SonglistCore;
+  const Practice = window.SonglistPractice;
+  let editorPractice = null;
+  let historyEditing = null;
+  let historyLimit = 100;
   let drafts;
   try { drafts = Core.draftStore(window.localStorage); }
   catch (_) { drafts = Core.draftStore({ get length() { throw new Error('Storage unavailable'); }, setItem() { throw new Error('Storage unavailable'); } }); }
@@ -162,6 +166,12 @@
     const value = Math.max(-24, Math.min(24, Number($('#transpose-value').value || 0)));
     $('#transpose-value').value = value;
     $('#transpose-output').textContent = signed(value);
+    if (editorPractice) {
+      editorPractice.presets.find((p) => p.id === editorPractice.activePresetId).transpose = value;
+      refreshPresetChoices();
+      const input = [...document.querySelectorAll('#preset-rows input[data-preset-field="transpose"]')].find((el) => el.dataset.presetId === editorPractice.activePresetId);
+      if (input && input !== document.activeElement) input.value = value;
+    }
     updatePreview();
   }
 
@@ -184,6 +194,12 @@
     const artistFilter = $('#artist-filter').value;
     const list = songs.filter((song) => {
       if (artistFilter && song.artist !== artistFilter) return false;
+      if (personalView()) {
+        const practiceFilter = $('#practice-filter').value;
+        if (practiceFilter === 'never' && song.lastSung) return false;
+        if (practiceFilter === 'recent' && (!song.lastSung || song.lastSung < dateBefore(30))) return false;
+        if (practiceFilter === 'older' && song.lastSung && song.lastSung >= dateBefore(90)) return false;
+      }
       if (!song.visible && !showHidden) return false;
       if (!terms.length) return true;
       const searchable = [song.artist, song.artistKana, song.title, song.songKana, song.key, sungKey(song)];
@@ -202,7 +218,7 @@
     const key = sungKey(song);
     const relative = parallelKey(key);
     const original = song.key || '—';
-    const chordSearch = actionButton('chord-search', song.id, '', 'ChordwikiをGoogle検索', '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M8 10.5h5M10.5 8v5"/></svg>');
+    const chordSearch = '<button class="search-menu-button" type="button" data-action="search-menu" data-id="' + escapeHtml(song.id) + '" title="Chordwiki・YouTube・コード譜検索" aria-label="' + escapeHtml(song.title) + 'を検索">検索 ▾</button>';
     const visibilityIcon = song.visible
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>'
       : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 6.1A10 10 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3.1 3.7M6.2 6.2C3.4 8 2 12 2 12s3.5 6 10 6c1.3 0 2.5-.3 3.5-.7"/></svg>';
@@ -223,9 +239,9 @@
     return '<tr class="' + (song.visible ? '' : 'is-hidden-song') + '">' +
       '<td><div class="artist-cell"><div class="artist-main"><div class="artist-info"><div class="cell-scroll"><span class="artist-name" title="' + escapeHtml(song.artist) + '">' + escapeHtml(song.artist) + hiddenMark + '</span></div>' + artistReading + '</div>' + artistAddButton + '</div></div></td>' +
       '<td><div class="song-cell"><div class="cell-scroll"><span class="song-name" title="' + escapeHtml(song.title) + '">' + escapeHtml(song.title) + '</span></div>' + songReading + '</div></td>' +
-      '<td><div class="key-cell">' + quickKey + '</div></td>' +
+      '<td><div class="key-stack"><div class="key-cell">' + quickKey + '</div>' + (personalView() ? presetSwitcher(song) : '') + '</div></td>' +
       searchCell +
-      '<td><div class="cell-scroll date-scroll"><span class="date-cell ' + (song.lastSung ? 'date-recorded' : 'date-empty') + '">' + escapeHtml(formatDate(song.lastSung)) + '</span></div></td>' +
+      '<td><div class="cell-scroll date-scroll"><span class="date-cell ' + (song.lastSung ? 'date-recorded' : 'date-empty') + '">' + escapeHtml(formatDate(song.lastSung)) + '</span>' + (personalView() ? '<button class="history-link" type="button" data-action="history" data-id="' + escapeHtml(song.id) + '">履歴 ' + Practice.get(song).history.length + '回</button>' : '') + '</div></td>' +
       notesCell + actionCell + '</tr>';
   }
 
@@ -235,13 +251,14 @@
     const openedCards = [...document.querySelectorAll('.song-card[open]')].map((el) => el.dataset.songId);
     const focused = document.activeElement?.dataset;
     const focusKey = focused?.action ? {action:focused.action,id:focused.id,delta:focused.delta} : null;
+    if ($('#history-dialog').open) renderHistory();
     const list = filteredSongs();
     const canEdit = personalView();
     const countScope = canEdit ? songs : songs.filter((song) => song.visible);
     const artistCount = new Set(countScope.map((song) => song.artist)).size;
     $('#artist-count').textContent = artistCount.toLocaleString('ja-JP');
     $('#song-count').textContent = countScope.length.toLocaleString('ja-JP');
-    const isFiltered = Boolean($('#search-input').value.trim() || $('#artist-filter').value);
+    const isFiltered = Boolean($('#search-input').value.trim() || $('#artist-filter').value || (personalView() && $('#practice-filter').value));
     $('#search-clear').classList.toggle('hidden', !isFiltered);
     $('#result-count').textContent = isFiltered ? '検索結果 ' + list.length.toLocaleString('ja-JP') + ' 曲' : '全 ' + list.length.toLocaleString('ja-JP') + ' 曲';
     $('.sort-note').innerHTML = '<span class="sort-symbol">↕</span> ' + ({ artist: 'アーティスト五十音順', title: '曲名五十音順', recent: '最後に歌った日順' }[$('#sort-mode').value] || 'アーティスト五十音順');
@@ -266,7 +283,7 @@
     $('#mobile-song-list').innerHTML = shown.map(songCard).join('');
     $('#load-more').classList.toggle('hidden', list.length <= shown.length);
     $('#load-more').textContent = 'さらに表示（残り ' + (list.length - shown.length) + ' 曲）';
-    $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">（移調）原曲 → 歌うキー / 平行調</th><th class="search-heading" scope="col" title="Chordwikiで検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
+    $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">（移調）原曲 → 歌うキー / 平行調</th><th class="search-heading" scope="col" title="Chordwiki・YouTube・コード譜検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
     document.querySelectorAll('.song-card').forEach((el) => { el.open = openedCards.includes(el.dataset.songId); });
     updateDataUi();
     if (focusKey) [...document.querySelectorAll('[data-action]')].find((el) => el.dataset.action === focusKey.action && el.dataset.id === focusKey.id && el.dataset.delta === focusKey.delta && el.offsetParent)?.focus({preventScroll:true});
@@ -466,10 +483,13 @@
     $('#song-reading').value = editing ? song.songKana : '';
     $('#artist-name').value = editing ? song.artist : defaults.artist || '';
     $('#song-title').value = editing ? song.title : '';
+    editorPractice = Practice.get(editing ? song : { id:'new', transpose:0, extra:{} });
+    $('#preset-editor').open = false;
+    renderPresetEditor();
     fillKeySelect($('#song-key'), editing ? song.key : '');
     $('#transpose-value').value = editing ? song.transpose : 0;
     updateTransposeOutput();
-    $('#last-sung').value = editing ? song.lastSung : '';
+    $('#last-sung').value = formatDate(editing ? song.lastSung : '');
     $('#song-notes').value = editing ? song.notes : '';
     $('#song-visible').checked = editing ? song.visible : true;
     $('#form-error').classList.add('hidden');
@@ -496,15 +516,18 @@
       showError($('#form-error'), 'アーティスト名・曲名と、それぞれの読み仮名を入力してください。');
       return;
     }
+    if (!validateEditorPresets()) return;
+    const practice = { ...editorPractice, history: previous ? Practice.get(previous).history : [] };
+    practice.presets.find((p) => p.id === practice.activePresetId).transpose = Number($('#transpose-value').value);
     const song = normalizeSong({
       id: id || crypto.randomUUID(),
       artistKana, artist, songKana: songKana || (previous && title === previous.title ? previous.songKana : ''), title,
       key: $('#song-key').value,
       transpose: $('#transpose-value').value,
-      lastSung: $('#last-sung').value,
+      lastSung: previous?.lastSung || '',
       notes: $('#song-notes').value.trim(),
       visible: $('#song-visible').checked,
-      extra: previous ? previous.extra : {}
+      extra: { ...(previous?.extra || {}), practice }
     });
     const duplicate = songs.find((item) => item.id !== id && songIdentity(item) === songIdentity(song));
     if (duplicate) {
@@ -528,6 +551,8 @@
     const action = button.dataset.action;
     const song = songs.find((item) => item.id === button.dataset.id);
     if (!song) return;
+    if (action === 'search-menu') return openSearchMenu(song);
+    if (action === 'history') return openHistory(song.id);
     if (action === 'chord-search') {
       window.open('https://www.google.com/search?q=' + encodeURIComponent(song.artist + ' ' + song.title + ' Chordwiki'), '_blank', 'noopener,noreferrer');
       return;
@@ -535,6 +560,8 @@
     if (!canMutate()) return;
     if (action === 'add-artist') return openSongDialog(null, { artist: song.artist, artistKana: song.artistKana });
     if (action === 'edit') return openSongDialog(song);
+    if (action === 'key-settings') { openSongDialog(song); $('#preset-editor').open = true; $('#preset-choice').focus(); return; }
+    if (action === 'sung') return recordToday(song);
     let next = songs;
     if (action === 'delete') {
       if (!window.confirm('「' + song.artist + ' / ' + song.title + '」を削除しますか？')) return;
@@ -542,8 +569,7 @@
     } else {
       const updated = { ...song };
       if (action === 'toggle-visible') updated.visible = !song.visible;
-      else if (action === 'sung') updated.lastSung = localDate();
-      else if (action === 'transpose') updated.transpose = Math.max(-24, Math.min(24, song.transpose + Number(button.dataset.delta)));
+      else if (action === 'transpose') Object.assign(updated, Practice.transpose(song, song.transpose + Number(button.dataset.delta)));
       else return;
       next = songs.map((item) => item.id === song.id ? updated : item);
     }
@@ -845,8 +871,9 @@
     if (params.get('sort') === 'title' || params.get('sort') === 'recent') $('#sort-mode').value = params.get('sort');
     $('#add-button').addEventListener('click', () => openSongDialog(null));
     setupUpgradeEvents();
+    setupPracticeEvents();
     $('#empty-add').addEventListener('click', () => { if (personalView()) openSongDialog(null); });
-    const clearSearch = () => { $('#search-input').value = ''; $('#artist-filter').value = ''; pageLimit = 100; render(); $('#search-input').focus(); };
+    const clearSearch = () => { $('#search-input').value = ''; $('#artist-filter').value = ''; $('#practice-filter').value = ''; pageLimit = 100; render(); $('#search-input').focus(); };
     $('#search-clear').addEventListener('click', clearSearch);
     $('#empty-clear').addEventListener('click', clearSearch);
     $('#search-input').addEventListener('keydown', (event) => { if (event.key === 'Escape') clearSearch(); });
@@ -961,8 +988,11 @@
     const previous = picker.value;
     picker.innerHTML = pendingDrafts.map((draft) => '<option value="' + escapeHtml(draft.draftId) + '">' + escapeHtml(new Date(draft.updatedAt).toLocaleString('ja-JP')) + '・' + draft.songs.length + '曲</option>').join('');
     if (pendingDrafts.some((d) => d.draftId === previous)) picker.value = previous;
-    document.querySelectorAll('#add-button,#empty-add,#import-button,#artist-manage-button,#save-song-button,[data-action]:not([data-action="chord-search"])').forEach((el) => { el.disabled = !canMutate(false); });
+    document.querySelectorAll('#add-button,#empty-add,#import-button,#artist-manage-button,#save-song-button,[data-action]:not([data-action="chord-search"]):not([data-action="search-menu"])').forEach((el) => { el.disabled = !canMutate(false); });
     $('#export-button').disabled = loadState !== 'ready';
+    $('#history-open-button').disabled = loadState !== 'ready';
+    $('#history-save').disabled = !canMutate(false) || songs.length === 0;
+    document.querySelectorAll('#history-records button').forEach((button) => { button.disabled = !canMutate(false); });
     $('#share-button').disabled = loadState !== 'ready' || dirty || saving || pendingDrafts.length > 0;
     $('#sharing-status').textContent = shareRecord?.enabled ? '共有中' : '共有停止中';
     if (personal && loadState === 'ready') setSyncState(conflictState ? '変更の確認が必要' : saving ? '保存中' : dirty ? '未保存の変更あり' : '保存済み', dirty || conflictState ? 'warn' : 'ok');
@@ -988,10 +1018,11 @@
     if (!dirty) finishDraft(user.id);
     render(); if (dirty) await persistSongs();
   }
-  const fieldNames = { artist:'アーティスト名', artistKana:'アーティストの読み', title:'曲名', songKana:'曲名の読み', key:'原曲キー', transpose:'移調', lastSung:'最後に歌った日', notes:'備考', visible:'閲覧用への表示', extra:'追加情報', $song:'曲の追加・削除' };
+  const fieldNames = { artist:'アーティスト名', artistKana:'アーティストの読み', title:'曲名', songKana:'曲名の読み', key:'原曲キー', transpose:'移調', lastSung:'最後に歌った日', notes:'備考', visible:'閲覧用への表示', extra:'歌唱履歴・キー設定など', $song:'曲の追加・削除' };
   function conflictValue(value) {
     if (value === undefined) return '削除';
     if (typeof value === 'boolean') return value ? '表示' : '非表示';
+    if (value?.practice) return '歌唱記録 ' + (value.practice.history?.length || 0) + '件／キー設定：' + (value.practice.presets || []).map((p) => p.name + ' (' + signed(p.transpose) + ')').join('、');
     if (value && typeof value === 'object') return value.title ? value.artist + ' / ' + value.title : JSON.stringify(value);
     return String(value || '未設定');
   }
@@ -1060,10 +1091,10 @@
     const button = (action, label, delta = '') => '<button type="button" class="button button-outline" data-action="' + action + '" data-id="' + escapeHtml(song.id) + '"' + (delta ? ' data-delta="' + delta + '"' : '') + '>' + label + '</button>';
     const fullKey = '<span class="key-chip">(' + signed(song.transpose) + ')</span> <span>' + escapeHtml(song.key || '未設定') + '</span> → <span class="key-chip">' + escapeHtml(key || '—') + '</span> / <span class="parallel-chip">' + escapeHtml(relative || '—') + '</span>';
     return '<details class="song-card' + (!song.visible ? ' is-hidden-song' : '') + '" data-song-id="' + escapeHtml(song.id) + '"><summary><span class="card-title">' + escapeHtml(song.title) + '</span><span class="card-artist">' + escapeHtml(song.artist) + (!song.visible ? '・非表示' : '') + '</span><span class="card-key">' + fullKey + '</span><span class="card-chevron" aria-hidden="true">⌄</span></summary><div class="card-details">' +
-      (personal ? '<p class="card-reading">読み：' + escapeHtml(song.artistKana + ' / ' + song.songKana) + '</p><div class="card-transpose">' + button('transpose','− 半音下げる','-1') + button('transpose','＋ 半音上げる','1') + '</div>' : '') +
-      '<p>最後に歌った日：' + escapeHtml(formatDate(song.lastSung)) + '</p>' +
+      (personal ? presetSwitcher(song) + '<p class="card-reading">読み：' + escapeHtml(song.artistKana + ' / ' + song.songKana) + '</p><div class="card-transpose">' + button('transpose','− 半音下げる','-1') + button('transpose','＋ 半音上げる','1') + '</div>' : '') +
+      '<p>最後に歌った日：' + escapeHtml(formatDate(song.lastSung)) + (personal ? ' ／ 記録 ' + Practice.get(song).history.length + '回' : '') + '</p>' +
       (personal ? '<p class="card-notes">備考：' + escapeHtml(song.notes || '未入力') + '</p>' : '') +
-      '<div class="card-actions">' + button('chord-search','コード譜を検索') + (personal ? button('sung','今日歌った') + button('edit','編集') + button('add-artist','同じ歌手の曲を追加') + button('toggle-visible',song.visible ? '閲覧用から非表示' : '閲覧用に表示') + button('delete','削除') : '') + '</div></div></details>';
+      '<div class="card-search-actions">' + searchLinks(song) + '</div><div class="card-actions">' + (personal ? button('sung','今日歌った') + button('history','歌唱履歴') + button('edit','編集') + button('add-artist','同じ歌手の曲を追加') + button('toggle-visible',song.visible ? '閲覧用から非表示' : '閲覧用に表示') + button('delete','削除') : '') + '</div></div></details>';
   }
   function updateShareDialog() {
     $('#share-state').textContent = shareRecord?.enabled ? '共有中' : '共有停止中';
@@ -1165,6 +1196,187 @@
     $('#recovery-back').addEventListener('click', () => { recoveryMode = false; history.replaceState(null,'',window.location.pathname); updateAccessUi(); });
     window.addEventListener('beforeunload', (event) => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });
     window.addEventListener('online', () => { if (dirty && !conflictState) void persistSongs(); });
+  }
+
+  function dateBefore(days) {
+    const date = new Date(); date.setDate(date.getDate() - days);
+    return date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0') + '-' + String(date.getDate()).padStart(2,'0');
+  }
+  function searchDestinations(song) {
+    const query = song.artist + ' ' + song.title;
+    return [
+      { label:'Chordwiki', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' Chordwiki') },
+      { label:'YouTube', href:'https://www.youtube.com/results?search_query=' + encodeURIComponent(query) },
+      { label:'コード譜', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' コード譜') }
+    ];
+  }
+  function searchLinks(song) {
+    return searchDestinations(song).map((item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>').join('');
+  }
+  function openSearchMenu(song) {
+    $('#search-song-name').textContent = song.artist + ' / ' + song.title;
+    $('#search-destinations').innerHTML = searchLinks(song);
+    $('#search-dialog').showModal();
+  }
+  function presetSwitcher(song) {
+    const practice = Practice.get(song);
+    return '<div class="preset-switcher"><select data-action="select-preset" data-id="' + escapeHtml(song.id) + '" aria-label="' + escapeHtml(song.title) + 'のキー設定">' + practice.presets.map((p) => '<option value="' + escapeHtml(p.id) + '"' + (p.id === practice.activePresetId ? ' selected' : '') + '>' + escapeHtml(p.name + ' (' + signed(p.transpose) + ')') + '</option>').join('') + '</select><button type="button" data-action="key-settings" data-id="' + escapeHtml(song.id) + '" title="キー設定を追加・編集" aria-label="' + escapeHtml(song.title) + 'のキー設定を編集">設定</button></div>';
+  }
+  function refreshPresetChoices() {
+    if (!editorPractice) return;
+    $('#preset-choice').innerHTML = editorPractice.presets.map((p) => '<option value="' + escapeHtml(p.id) + '"' + (p.id === editorPractice.activePresetId ? ' selected' : '') + '>' + escapeHtml(p.name + ' (' + signed(p.transpose) + ')') + '</option>').join('');
+  }
+  function renderPresetEditor() {
+    refreshPresetChoices();
+    $('#preset-rows').innerHTML = editorPractice.presets.map((p) => '<div class="preset-editor-row"><label><span class="sr-only">キー設定名</span><input data-preset-id="' + escapeHtml(p.id) + '" data-preset-field="name" value="' + escapeHtml(p.name) + '" required maxlength="40" placeholder="通常・低め・弾き語り用"></label><label><span class="sr-only">原曲からの移調</span><input type="number" min="-24" max="24" step="1" required data-preset-id="' + escapeHtml(p.id) + '" data-preset-field="transpose" value="' + p.transpose + '"></label><button type="button" class="button button-outline" data-remove-preset="' + escapeHtml(p.id) + '"' + (editorPractice.presets.length === 1 ? ' disabled' : '') + '>削除</button></div>').join('');
+  }
+  function validateEditorPresets() {
+    const presets = editorPractice?.presets || [];
+    if (!presets.length || presets.some((p) => !p.name.trim() || p.name.length > 40 || !Number.isInteger(Number(p.transpose)) || Number(p.transpose) < -24 || Number(p.transpose) > 24)) {
+      showError($('#form-error'),'キー設定名と、−24〜＋24の整数で移調を入力してください。'); return false;
+    }
+    if (new Set(presets.map((p) => Core.identity(p.name))).size !== presets.length) {
+      showError($('#form-error'),'キー設定名が重複しています。区別できる名前を付けてください。'); return false;
+    }
+    return true;
+  }
+  async function switchListPreset(event) {
+    const select = event.target.closest('select[data-action="select-preset"]');
+    if (!select || !canMutate()) return;
+    const song = songs.find((s) => s.id === select.dataset.id); if (!song) return;
+    const next = Practice.setPreset(song,select.value);
+    if (commitSongs(songs.map((s) => s.id === song.id ? next : s))) await persistSongs();
+  }
+  async function recordToday(song) {
+    const today = localDate(), previous = Practice.get(song).history;
+    if (previous.some((r) => r.date === today) && !window.confirm('今日の記録があります。もう1回歌った記録を追加しますか？')) return;
+    const updated = Practice.addRecord(song,today,crypto.randomUUID());
+    if (!commitSongs(songs.map((s) => s.id === song.id ? updated : s))) return;
+    if (await persistSongs()) announce('今日の歌唱を記録しました（記録 ' + Practice.get(updated).history.length + '回）。');
+  }
+  function historyOptions(selected='') {
+    return sortSongs(songs.slice(),'artist').map((song) => '<option value="' + escapeHtml(song.id) + '"' + (song.id === selected ? ' selected' : '') + '>' + escapeHtml(song.artist + ' / ' + song.title) + '</option>').join('');
+  }
+  function openHistory(songId='') {
+    if (!personalView() || loadState !== 'ready') return;
+    $('#history-song-filter').innerHTML = '<option value="">すべての曲</option>' + historyOptions(songId);
+    $('#history-month').value = '';
+    $('#history-add-song').innerHTML = historyOptions(songId || songs[0]?.id);
+    historyLimit = 100; resetHistoryForm(); renderHistory();
+    if (!$('#history-dialog').open) $('#history-dialog').showModal();
+  }
+  function fillHistoryPreset(record=null) {
+    const song = songs.find((s) => s.id === $('#history-add-song').value);
+    if (!song) { $('#history-add-preset').innerHTML = ''; return; }
+    const practice = Practice.get(song);
+    $('#history-add-preset').innerHTML = (record ? '<option value="$keep" selected>記録済みのキーを保持</option>' : '') + practice.presets.map((p) => '<option value="' + escapeHtml(p.id) + '"' + (!record && p.id === practice.activePresetId ? ' selected' : '') + '>' + escapeHtml(p.name + ' (' + signed(p.transpose) + ') / ' + (sungKey({key:song.key,transpose:p.transpose}) || 'キー未設定')) + '</option>').join('');
+  }
+  function resetHistoryForm() {
+    historyEditing = null;
+    $('#history-add-song').disabled = false;
+    $('#history-add-date').value = localDate(); $('#history-add-date').max = localDate();
+    $('#history-save').textContent = '1回として記録';
+    $('#history-edit-cancel').classList.add('hidden');
+    $('#history-error').classList.add('hidden');
+    fillHistoryPreset();
+  }
+  function renderHistory() {
+    const songId = $('#history-song-filter').value, month = $('#history-month').value;
+    const records = songs.flatMap((song) => Practice.get(song).history.map((record) => ({song,record}))).filter(({song,record}) => (!songId || song.id === songId) && (!month || record.date.startsWith(month))).sort((a,b) => b.record.date.localeCompare(a.record.date) || collator.compare(a.song.artist,b.song.artist) || collator.compare(a.song.title,b.song.title) || a.record.id.localeCompare(b.record.id));
+    $('#history-summary').textContent = records.length + '回の記録・' + new Set(records.map((r) => r.record.date)).size + '日・' + new Set(records.map((r) => r.song.id)).size + '曲';
+    $('#history-legacy-note').classList.toggle('hidden', !records.some(({record}) => record.legacy));
+    $('#history-records').innerHTML = records.length ? records.slice(0,historyLimit).map(({song,record}) => {
+      const key = record.legacy || record.transpose == null ? '歌唱キーは未記録' : (record.presetName ? record.presetName + ' ' : '') + '(' + signed(record.transpose) + ') ' + (sungKey({key:record.key,transpose:record.transpose}) || 'キー未設定');
+      return '<li class="history-record"><div><time datetime="' + escapeHtml(record.date) + '">' + escapeHtml(formatDate(record.date)) + '</time><strong>' + escapeHtml(song.title) + '</strong><span>' + escapeHtml(song.artist) + '</span><small>' + escapeHtml(key) + (record.legacy ? '・以前の最終歌唱日' : '') + '</small></div><div class="history-record-actions"><button class="button button-outline" type="button" data-history-action="edit" data-song-id="' + escapeHtml(song.id) + '" data-record-id="' + escapeHtml(record.id) + '">修正</button><button class="button button-outline" type="button" data-history-action="delete" data-song-id="' + escapeHtml(song.id) + '" data-record-id="' + escapeHtml(record.id) + '">削除</button></div></li>';
+    }).join('') : '<li class="history-empty">該当する歌唱記録がありません。</li>';
+    $('#history-more').classList.toggle('hidden',records.length <= historyLimit);
+    $('#history-more').textContent = 'さらに表示（残り ' + Math.max(0,records.length-historyLimit) + '件）';
+    document.querySelectorAll('#history-records button').forEach((b) => { b.disabled = !canMutate(false); });
+    $('#history-save').disabled = !canMutate(false) || songs.length === 0;
+  }
+  async function saveHistoryRecord(event) {
+    event.preventDefault(); if (!canMutate()) return;
+    const song = songs.find((s) => s.id === $('#history-add-song').value), date = $('#history-add-date').value;
+    if (!song) return showError($('#history-error'),'曲を選んでください。');
+    if (!Practice.validDate(date) || date > localDate()) return showError($('#history-error'),'今日までの有効な日付を入力してください。');
+    let updated;
+    if (historyEditing) {
+      const practice = Practice.get(song), old = practice.history.find((r) => r.id === historyEditing.recordId);
+      if (!old || song.id !== historyEditing.songId) return showError($('#history-error'),'この記録は変更されています。一覧から開き直してください。');
+      const presetId = $('#history-add-preset').value;
+      const preset = practice.presets.find((p) => p.id === presetId);
+      if (presetId !== '$keep' && !preset) return showError($('#history-error'),'キー設定が変更されています。記録を開き直してください。');
+      const replacement = presetId === '$keep' ? { ...old,date } : { id:old.id,date,key:song.key,transpose:preset.transpose,presetName:preset.name };
+      practice.history = practice.history.map((r) => r.id === old.id ? replacement : r);
+      updated = Practice.put(song,practice);
+    } else updated = Practice.addRecord(song,date,crypto.randomUUID(),$('#history-add-preset').value);
+    if (!commitSongs(songs.map((s) => s.id === song.id ? updated : s))) return;
+    resetHistoryForm(); renderHistory();
+    if (await persistSongs()) announce('歌唱履歴を保存しました。');
+  }
+  async function historyRecordAction(event) {
+    const button = event.target.closest('[data-history-action]'); if (!button || !canMutate()) return;
+    const song = songs.find((s) => s.id === button.dataset.songId); if (!song) return;
+    const practice = Practice.get(song), record = practice.history.find((r) => r.id === button.dataset.recordId); if (!record) return;
+    if (button.dataset.historyAction === 'edit') {
+      historyEditing = { songId:song.id,recordId:record.id };
+      $('#history-add-song').value = song.id; $('#history-add-song').disabled = true;
+      $('#history-add-date').value = record.date; fillHistoryPreset(record);
+      $('#history-save').textContent = '記録を更新'; $('#history-edit-cancel').classList.remove('hidden');
+      $('#history-add-date').focus(); return;
+    }
+    if (!window.confirm(formatDate(record.date) + '「' + song.title + '」の記録を削除しますか？')) return;
+    practice.history = practice.history.filter((r) => r.id !== record.id);
+    const updated = Practice.put(song,practice);
+    if (commitSongs(songs.map((s) => s.id === song.id ? updated : s))) {
+      if (historyEditing?.recordId === record.id) resetHistoryForm();
+      renderHistory(); await persistSongs();
+    }
+  }
+  function setupPracticeEvents() {
+    $('#history-open-button').addEventListener('click',() => openHistory());
+    $('#history-song-filter').addEventListener('change',() => { historyLimit=100; renderHistory(); });
+    $('#history-month').addEventListener('change',() => { historyLimit=100; renderHistory(); });
+    $('#history-clear-month').addEventListener('click',() => { $('#history-month').value=''; historyLimit=100; renderHistory(); });
+    $('#history-more').addEventListener('click',() => { historyLimit+=100; renderHistory(); });
+    $('#history-form').addEventListener('submit',saveHistoryRecord);
+    $('#history-add-song').addEventListener('change',() => fillHistoryPreset());
+    $('#history-edit-cancel').addEventListener('click',resetHistoryForm);
+    $('#history-records').addEventListener('click',historyRecordAction);
+    $('#practice-filter').addEventListener('change',() => { pageLimit=100; render(); });
+    $('#song-list').addEventListener('change',switchListPreset);
+    $('#mobile-song-list').addEventListener('change',switchListPreset);
+    $('#preset-rows').addEventListener('invalid',() => { $('#preset-editor').open = true; },true);
+    $('#preset-choice').addEventListener('change',() => {
+      editorPractice.activePresetId = $('#preset-choice').value;
+      $('#transpose-value').value = editorPractice.presets.find((p) => p.id === editorPractice.activePresetId).transpose;
+      updateTransposeOutput();
+    });
+    $('#preset-rows').addEventListener('input',(event) => {
+      const input=event.target.closest('[data-preset-field]'); if (!input) return;
+      const preset=editorPractice.presets.find((p) => p.id===input.dataset.presetId);
+      if (input.dataset.presetField==='name') preset.name=input.value;
+      else preset.transpose=input.value === '' ? NaN : Number(input.value);
+      refreshPresetChoices();
+      if (preset.id===editorPractice.activePresetId && input.dataset.presetField==='transpose' && Number.isFinite(preset.transpose)) {
+        $('#transpose-value').value=preset.transpose; $('#transpose-output').textContent=signed(preset.transpose); updatePreview();
+      }
+    });
+    $('#preset-rows').addEventListener('click',(event) => {
+      const button=event.target.closest('[data-remove-preset]'); if (!button || editorPractice.presets.length<=1) return;
+      editorPractice.presets=editorPractice.presets.filter((p) => p.id!==button.dataset.removePreset);
+      if (!editorPractice.presets.some((p) => p.id===editorPractice.activePresetId)) editorPractice.activePresetId=editorPractice.presets[0].id;
+      $('#transpose-value').value=editorPractice.presets.find((p) => p.id===editorPractice.activePresetId).transpose;
+      renderPresetEditor(); updateTransposeOutput();
+    });
+    $('#preset-add').addEventListener('click',() => {
+      if (editorPractice.presets.length>=20) return announce('キー設定は1曲につき20件まで保存できます。');
+      let number=2; while(editorPractice.presets.some((p) => p.name==='設定'+number)) number++;
+      const preset={id:crypto.randomUUID(),name:'設定'+number,transpose:Number($('#transpose-value').value)};
+      editorPractice.presets.push(preset); editorPractice.activePresetId=preset.id;
+      renderPresetEditor(); updateTransposeOutput();
+      [...$('#preset-rows').querySelectorAll('input[data-preset-field="name"]')].at(-1).focus();
+    });
   }
 
   start();

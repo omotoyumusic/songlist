@@ -314,3 +314,59 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .list-title-row { flex-wrap: wrap; }
 .list-title-row h2 { min-width: 0; overflow-wrap: anywhere; }
 .library-tools summary:focus-visible, .song-card summary:focus-visible { outline: 3px solid #8bcba0; outline-offset: 3px; }
+
+/* Practice tools fit inside the existing columns. */
+.key-stack { min-width: 0; display: grid; gap: 7px; }
+.preset-switcher { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.preset-switcher select { flex: 1; min-width: 0; max-width: 160px; min-height: 29px; padding: 3px 5px; border: 1px solid #d8e6dc; border-radius: 6px; color: #396149; background: #fff; font-size: 11px; text-overflow: ellipsis; }
+.preset-switcher button, .history-link, .search-menu-button { min-height: 29px; padding: 3px 5px; border: 1px solid #d8e6dc; border-radius: 6px; color: #396149; background: #f8fcf9; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.preset-switcher button:hover, .history-link:hover, .search-menu-button:hover { background: #eaf5ed; }
+.history-link { display: block; margin-top: 5px; }
+.search-menu-button { flex: 1 0 auto; padding-inline: 3px; font-size: 10px; }
+.search-destinations { display: grid; gap: 12px; margin-top: 24px; }
+.search-destinations .button { min-height: 48px; justify-content: center; }
+#search-song-name { line-height: 1.7; overflow-wrap: anywhere; }
+.preset-editor { min-width: 0; padding: 12px; border: 1px solid #dce8df; border-radius: 10px; background: #f8fcf9; }
+.preset-editor summary { min-height: 30px; color: #386147; font-size: 13px; cursor: pointer; }
+.preset-editor-head, .preset-editor-row { display: grid; grid-template-columns: minmax(0,1fr) 80px 60px; gap: 8px; align-items: center; }
+.preset-editor-head { margin: 12px 0 6px; color: #65776b; font-size: 12px; }
+.preset-editor-row { margin-bottom: 10px; }
+.preset-editor-row label { min-width: 0; }
+.preset-editor-row input { width: 100%; min-height: 44px; min-width: 0; padding: 8px; border: 1px solid #d8e6dc; border-radius: 7px; font: inherit; font-size: 14px; background: #fff; }
+.preset-editor-row button { min-height: 44px; padding: 0 8px; font-size: 12px; }
+.preset-editor .subtle { line-height: 1.8; }
+.preset-editor :focus-visible, .preset-switcher :focus-visible, .history-link:focus-visible, .search-menu-button:focus-visible { outline: 3px solid #8bcba0; outline-offset: 2px; }
+.history-modal { width: min(720px,calc(100vw - 24px)); }
+.history-filters { display: grid; grid-template-columns: minmax(0,1fr) 150px auto; gap: 10px; align-items: end; }
+.history-filters .button { min-height: 44px; padding-inline: 10px; }
+.history-summary { color: #315d41; font-size: 14px; font-weight: 600; margin-top: 22px; }
+.history-records { max-height: 320px; overflow: auto; list-style: none; margin: 12px 0; padding: 0; border-block: 1px solid #dfe9e2; scrollbar-width: thin; }
+.history-record { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid #e5eee8; }
+.history-record:last-child { border-bottom: 0; }
+.history-record > div:first-child { min-width: 0; display: grid; gap: 4px; font-size: 13px; overflow-wrap: anywhere; }
+.history-record time { color: #3f7550; font-size: 12px; }
+.history-record strong { color: #294b35; font-size: 15px; }
+.history-record small { color: #65776b; }
+.history-record-actions { display: flex; flex-shrink: 0; gap: 6px; }
+.history-record-actions .button { min-height: 44px; padding-inline: 10px; font-size: 12px; }
+.history-record-actions [data-history-action="delete"] { color: #a1443b; }
+.history-empty { padding: 24px 0; color: #65776b; font-size: 13px; }
+.history-entry { margin-top: 26px; padding-top: 8px; }
+.history-entry h3 { color: #315d41; font-size: 16px; }
+.history-modal > form > .subtle, #history-legacy-note { line-height: 1.8; }
+@media (max-width: 700px) {
+  .toolbar-filters .practice-filter { flex: 1 0 100%; }
+  .practice-filter select { font-size: 13px; }
+  .card-details .preset-switcher { margin-top: 12px; }
+  .card-details .preset-switcher select { max-width: none; min-height: 44px; padding: 8px; font-size: 16px; }
+  .card-details .preset-switcher button { min-height: 44px; padding-inline: 14px; font-size: 13px; }
+  .card-search-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .card-search-actions .button { min-height: 44px; padding-inline: 12px; font-size: 12px; }
+  .history-filters { grid-template-columns: minmax(0,1fr) auto; }
+  .history-filters .field:first-child { grid-column: 1 / -1; }
+  .history-record { flex-wrap: wrap; }
+  .history-record-actions { margin-left: auto; }
+  .preset-editor-head, .preset-editor-row { grid-template-columns: minmax(0,1fr) 66px 52px; gap: 6px; }
+  .preset-editor-row input { font-size: 16px; }
+  .modal-heading .icon-button { min-width: 44px; min-height: 44px; }
+}

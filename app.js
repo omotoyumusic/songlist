@@ -253,6 +253,7 @@
     const focusKey = focused?.action ? {action:focused.action,id:focused.id,delta:focused.delta} : null;
     if ($('#history-dialog').open) renderHistory();
     const list = filteredSongs();
+    updateKanaIndex(list);
     const canEdit = personalView();
     const countScope = canEdit ? songs : songs.filter((song) => song.visible);
     const artistCount = new Set(countScope.map((song) => song.artist)).size;
@@ -872,6 +873,7 @@
     $('#add-button').addEventListener('click', () => openSongDialog(null));
     setupUpgradeEvents();
     setupPracticeEvents();
+    setupKanaIndex();
     $('#empty-add').addEventListener('click', () => { if (personalView()) openSongDialog(null); });
     const clearSearch = () => { $('#search-input').value = ''; $('#artist-filter').value = ''; $('#practice-filter').value = ''; pageLimit = 100; render(); $('#search-input').focus(); };
     $('#search-clear').addEventListener('click', clearSearch);
@@ -1090,7 +1092,7 @@
     const personal = personalView();
     const button = (action, label, delta = '') => '<button type="button" class="button button-outline" data-action="' + action + '" data-id="' + escapeHtml(song.id) + '"' + (delta ? ' data-delta="' + delta + '"' : '') + '>' + label + '</button>';
     const fullKey = '<span class="key-chip">(' + signed(song.transpose) + ')</span> <span>' + escapeHtml(song.key || '未設定') + '</span> → <span class="key-chip">' + escapeHtml(key || '—') + '</span> / <span class="parallel-chip">' + escapeHtml(relative || '—') + '</span>';
-    return '<details class="song-card' + (!song.visible ? ' is-hidden-song' : '') + '" data-song-id="' + escapeHtml(song.id) + '"><summary><span class="card-title">' + escapeHtml(song.title) + '</span><span class="card-artist">' + escapeHtml(song.artist) + (!song.visible ? '・非表示' : '') + '</span><span class="card-key">' + fullKey + '</span><span class="card-chevron" aria-hidden="true">⌄</span></summary><div class="card-details">' +
+    return '<details class="song-card' + (!song.visible ? ' is-hidden-song' : '') + '" data-song-id="' + escapeHtml(song.id) + '" data-kana-group="' + kanaGroup(song) + '"><summary><span class="card-title">' + escapeHtml(song.title) + '</span><span class="card-artist">' + escapeHtml(song.artist) + (!song.visible ? '・非表示' : '') + '</span><span class="card-key">' + fullKey + '</span><span class="card-chevron" aria-hidden="true">⌄</span></summary><div class="card-details">' +
       (personal ? presetSwitcher(song) + '<p class="card-reading">読み：' + escapeHtml(song.artistKana + ' / ' + song.songKana) + '</p><div class="card-transpose">' + button('transpose','− 半音下げる','-1') + button('transpose','＋ 半音上げる','1') + '</div>' : '') +
       '<p>最後に歌った日：' + escapeHtml(formatDate(song.lastSung)) + (personal ? ' ／ 記録 ' + Practice.get(song).history.length + '回' : '') + '</p>' +
       (personal ? '<p class="card-notes">備考：' + escapeHtml(song.notes || '未入力') + '</p>' : '') +
@@ -1377,6 +1379,169 @@
       renderPresetEditor(); updateTransposeOutput();
       [...$('#preset-rows').querySelectorAll('input[data-preset-field="name"]')].at(-1).focus();
     });
+  }
+
+  const kanaSections = [
+    ['あ','あいうえおぁぃぅぇぉ'],['か','かきくけこゕゖ'],['さ','さしすせそ'],
+    ['た','たちつてとっ'],['な','なにぬねの'],['は','はひふへほ'],
+    ['ま','まみむめも'],['や','やゆよゃゅょ'],['ら','らりるれろ'],['わ','わをんゎゐゑ'],['他','']
+  ];
+  const kanaNavigation = { targets:new Map(), enabled:false, dragging:false, pointerId:null, pointGroup:'', jumpedGroup:'', suppressedUntil:0, frame:0, feedbackTimer:0 };
+  function kanaGroup(song) {
+    const titleOrder = $('#sort-mode').value === 'title';
+    const reading = titleOrder ? song.songKana || song.title : song.artistKana || song.artist;
+    const first = normalizeReading(reading).normalize('NFD').replace(/[\u3099\u309a]/gu,'').replace(/^[\s\p{P}\p{S}ー]+/u,'').charAt(0);
+    return kanaSections.find(([,characters]) => characters.includes(first) && first)?.[0] || '他';
+  }
+  function kanaLabel(group) { return group === '他' ? '英数字・その他' : group + '行'; }
+  function setKanaCurrent(group) {
+    $('#kana-index').querySelectorAll('button').forEach((button) => {
+      if (button.dataset.kana === group) button.setAttribute('aria-current','location');
+      else button.removeAttribute('aria-current');
+    });
+  }
+  function updateKanaIndex(list) {
+    const nav = $('#kana-index');
+    if (!nav) return;
+    kanaNavigation.targets = new Map();
+    list.forEach((song,index) => {
+      const group = kanaGroup(song);
+      if (!kanaNavigation.targets.has(group)) kanaNavigation.targets.set(group,{id:song.id,index,song});
+    });
+    kanaNavigation.enabled = loadState === 'ready' && list.length > 0 && $('#sort-mode').value !== 'recent' && !recoveryMode && Boolean(user || sharedListMode) && window.matchMedia('(max-width: 700px)').matches;
+    const titleOrder = $('#sort-mode').value === 'title';
+    nav.setAttribute('aria-label',(titleOrder ? '曲名' : 'アーティスト名') + 'の五十音インデックス');
+    nav.querySelectorAll('button').forEach((button) => {
+      const available = kanaNavigation.targets.has(button.dataset.kana);
+      button.setAttribute('aria-disabled',String(!available));
+      button.setAttribute('aria-label',kanaLabel(button.dataset.kana) + (available ? 'へ移動' : '：該当する曲なし'));
+      button.tabIndex = available ? 0 : -1;
+    });
+    $('#mobile-song-list').classList.toggle('has-kana-index',kanaNavigation.enabled);
+    $('#kana-index-help').classList.toggle('hidden',!kanaNavigation.enabled);
+    if (!kanaNavigation.enabled) {
+      finishKanaGesture(false);
+      nav.classList.add('hidden');
+      $('#kana-index-feedback').classList.add('hidden');
+    }
+    scheduleKanaLayout();
+  }
+  function scheduleKanaLayout() {
+    if (kanaNavigation.frame) return;
+    kanaNavigation.frame = window.requestAnimationFrame(() => { kanaNavigation.frame=0; positionKanaIndex(); });
+  }
+  function positionKanaIndex() {
+    const nav = $('#kana-index');
+    if (!kanaNavigation.enabled) return nav.classList.add('hidden');
+    if (kanaNavigation.dragging) return; // Keep the rail under the finger during jumps.
+    const viewport = window.visualViewport;
+    const viewportTop = viewport?.offsetTop || 0;
+    const viewportBottom = viewportTop + (viewport?.height || window.innerHeight);
+    const controls = $('.library-controls').getBoundingClientRect();
+    const list = $('#mobile-song-list').getBoundingClientRect();
+    const top = Math.max(viewportTop + 12,controls.bottom + 8,list.top);
+    const bottom = Math.min(viewportBottom - 16,list.bottom);
+    const visible = bottom - top >= 220 && !document.querySelector('dialog[open]');
+    nav.classList.toggle('hidden',!visible);
+    if (!visible) return;
+    const height = Math.min(330,bottom-top);
+    nav.style.top = (top + (bottom-top-height)/2) + 'px';
+    nav.style.height = height + 'px';
+    // Only measure a logarithmic number of cards, including when many are expanded.
+    const cards = $('#mobile-song-list').children;
+    let low=0,high=cards.length-1;
+    const edge = Math.max(viewportTop,controls.bottom) + 12;
+    while (low<high) {
+      const middle=Math.floor((low+high)/2);
+      if (cards[middle].getBoundingClientRect().bottom<=edge) low=middle+1;
+      else high=middle;
+    }
+    setKanaCurrent(cards[low]?.dataset.kanaGroup);
+  }
+  function showKanaFeedback(group) {
+    window.clearTimeout(kanaNavigation.feedbackTimer);
+    $('#kana-index-letter').textContent = group;
+    $('#kana-index-caption').textContent = kanaNavigation.targets.has(group) ? kanaLabel(group) : '該当する曲なし';
+    $('#kana-index-feedback').classList.remove('hidden');
+    if (!kanaNavigation.dragging) kanaNavigation.feedbackTimer = window.setTimeout(() => $('#kana-index-feedback').classList.add('hidden'),650);
+  }
+  function jumpKana(group,spoken=false) {
+    const target = kanaNavigation.targets.get(group);
+    showKanaFeedback(group);
+    if (!target) return;
+    if (target.index >= pageLimit) {
+      pageLimit = Math.ceil((target.index+1)/100)*100;
+      render();
+    }
+    const card = [...$('#mobile-song-list').children].find((item) => item.dataset.songId === target.id);
+    if (!card) return;
+    const stickyHeight = $('.library-controls').offsetHeight;
+    window.scrollTo({top:Math.max(0,window.scrollY+card.getBoundingClientRect().top-stickyHeight-8),behavior:'auto'});
+    kanaNavigation.jumpedGroup = group;
+    setKanaCurrent(group);
+    if (spoken) $('#kana-index-status').textContent = kanaLabel(group) + '、' + target.song.artist + '、' + target.song.title + 'へ移動しました。';
+    scheduleKanaLayout();
+  }
+  function moveKanaPointer(event) {
+    const buttons = [...$('#kana-index').querySelectorAll('button')];
+    const button = buttons.find((item) => event.clientY < item.getBoundingClientRect().bottom) || buttons.at(-1);
+    const group = button.dataset.kana;
+    if (group === kanaNavigation.pointGroup) return;
+    kanaNavigation.pointGroup = group;
+    jumpKana(group);
+  }
+  function finishKanaGesture(spoken=true) {
+    if (!kanaNavigation.dragging) return;
+    const nav = $('#kana-index');
+    const pointerId = kanaNavigation.pointerId;
+    kanaNavigation.dragging=false; kanaNavigation.pointerId=null;
+    nav.classList.remove('is-dragging');
+    if (pointerId != null && nav.hasPointerCapture(pointerId)) nav.releasePointerCapture(pointerId);
+    kanaNavigation.suppressedUntil=Date.now()+450;
+    const target=kanaNavigation.targets.get(kanaNavigation.jumpedGroup);
+    if (spoken && target) $('#kana-index-status').textContent=kanaLabel(kanaNavigation.jumpedGroup)+'、'+target.song.artist+'、'+target.song.title+'へ移動しました。';
+    kanaNavigation.feedbackTimer=window.setTimeout(() => $('#kana-index-feedback').classList.add('hidden'),450);
+    scheduleKanaLayout();
+  }
+  function setupKanaIndex() {
+    const nav=$('#kana-index');
+    nav.innerHTML=kanaSections.map(([group]) => '<button type="button" data-kana="'+group+'" aria-controls="mobile-song-list">'+group+'</button>').join('');
+    nav.addEventListener('pointerdown',(event) => {
+      if (!kanaNavigation.enabled || !event.isPrimary || event.button!==0) return;
+      event.preventDefault();
+      kanaNavigation.dragging=true; kanaNavigation.pointerId=event.pointerId;
+      kanaNavigation.pointGroup=''; kanaNavigation.jumpedGroup='';
+      nav.setPointerCapture(event.pointerId); nav.classList.add('is-dragging');
+      moveKanaPointer(event);
+    });
+    nav.addEventListener('pointermove',(event) => {
+      if (!kanaNavigation.dragging || event.pointerId!==kanaNavigation.pointerId) return;
+      event.preventDefault(); moveKanaPointer(event);
+    });
+    nav.addEventListener('pointerup',(event) => { if (event.pointerId===kanaNavigation.pointerId) finishKanaGesture(); });
+    nav.addEventListener('pointercancel',() => finishKanaGesture(false));
+    nav.addEventListener('lostpointercapture',() => finishKanaGesture(false));
+    nav.addEventListener('click',(event) => {
+      const button=event.target.closest('button[data-kana]');
+      if (!button || !kanaNavigation.enabled || (event.detail!==0 && Date.now()<kanaNavigation.suppressedUntil) || button.getAttribute('aria-disabled')==='true') return;
+      jumpKana(button.dataset.kana,true);
+    });
+    nav.addEventListener('keydown',(event) => {
+      if (!['ArrowUp','ArrowDown','Home','End'].includes(event.key)) return;
+      const buttons=[...nav.querySelectorAll('button[aria-disabled="false"]')];
+      if (!buttons.length) return;
+      event.preventDefault();
+      const current=buttons.indexOf(document.activeElement);
+      const next=event.key==='Home' ? 0 : event.key==='End' ? buttons.length-1 : Math.max(0,Math.min(buttons.length-1,current+(event.key==='ArrowDown' ? 1 : -1)));
+      buttons[next].focus({preventScroll:true}); jumpKana(buttons[next].dataset.kana,true);
+    });
+    window.addEventListener('scroll',scheduleKanaLayout,{passive:true});
+    window.addEventListener('resize',() => updateKanaIndex(filteredSongs()),{passive:true});
+    window.visualViewport?.addEventListener('resize',scheduleKanaLayout,{passive:true});
+    window.visualViewport?.addEventListener('scroll',scheduleKanaLayout,{passive:true});
+    $('#mobile-song-list').addEventListener('toggle',scheduleKanaLayout,true);
+    // Native modal dialogs temporarily cover the list and its index.
+    new MutationObserver(scheduleKanaLayout).observe(document.body,{subtree:true,attributes:true,attributeFilter:['open']});
   }
 
   start();

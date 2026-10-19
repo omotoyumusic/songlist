@@ -371,19 +371,24 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   .modal-heading .icon-button { min-width: 44px; min-height: 44px; }
 }
 
-/* Touch index uses the readings already used for list sorting. */
-.kana-index, .kana-index-feedback { display: none; }
+/* Index and paging controls are shared by the table and mobile cards. */
+.list-pagination { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; padding: 16px 12px; }
+.list-pagination .load-more { display: inline-flex; margin: 0; }
+.list-pagination .button { min-height: 44px; }
+#kana-index-help { display: block; margin-top: 4px; color: #51745c; }
+.kana-index { position: fixed; right: max(12px,env(safe-area-inset-right)); z-index: 8; display: grid; grid-template-rows: repeat(11,minmax(0,1fr)); width: 28px; padding: 3px 0; border: 1px solid #d7e8dc; border-radius: 16px; background: #f6fbf7f2; box-shadow: 0 2px 10px #17392612; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: width .12s; }
+.kana-index.is-dragging, .kana-index:focus-within { width: 46px; background: #e9f5ed; box-shadow: 0 3px 15px #17392625; }
+.kana-index button { min-width: 0; min-height: 0; display: grid; place-items: center; width: 100%; padding: 0; border: 0; border-radius: 12px; background: transparent; color: #337149; font-size: 12px; font-weight: 650; line-height: 1; touch-action: none; -webkit-tap-highlight-color: transparent; }
+.kana-index button[aria-disabled="true"] { color: #a3b6a9; font-weight: 400; }
+.kana-index button[aria-current="location"] { color: #fff; background: #287c49; }
+.kana-index button:focus-visible { outline: 3px solid #91c5a0; outline-offset: 1px; }
+.kana-index-feedback { position: fixed; z-index: 9; top: 50%; left: 50%; transform: translate(-50%,-50%); display: grid; place-items: center; gap: 8px; min-width: 122px; min-height: 122px; padding: 18px; border: 1px solid #c7dece; border-radius: 24px; color: #22623b; background: #f4fbf6f5; box-shadow: 0 8px 35px #17392626; pointer-events: none; }
+.kana-index-feedback strong { font-size: 54px; line-height: 1; }
+.kana-index-feedback span { color: #52755d; font-size: 12px; }
+@media (min-width: 701px) {
+  .table-wrap.has-kana-index { width: calc(100% - 44px); }
+}
 @media (max-width: 700px) {
-  #kana-index-help { display: block; margin-top: 4px; color: #51745c; }
   .mobile-song-list.has-kana-index { padding-right: 43px; }
-  .kana-index { position: fixed; right: max(12px,env(safe-area-inset-right)); z-index: 8; display: grid; grid-template-rows: repeat(11,minmax(0,1fr)); width: 28px; padding: 3px 0; border: 1px solid #d7e8dc; border-radius: 16px; background: #f6fbf7f2; box-shadow: 0 2px 10px #17392612; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: width .12s; }
-  .kana-index.is-dragging, .kana-index:focus-within { width: 46px; background: #e9f5ed; box-shadow: 0 3px 15px #17392625; }
-  .kana-index button { min-width: 0; min-height: 0; display: grid; place-items: center; width: 100%; padding: 0; border: 0; border-radius: 12px; background: transparent; color: #337149; font-size: 12px; font-weight: 650; line-height: 1; touch-action: none; -webkit-tap-highlight-color: transparent; }
-  .kana-index button[aria-disabled="true"] { color: #a3b6a9; font-weight: 400; }
-  .kana-index button[aria-current="location"] { color: #fff; background: #287c49; }
-  .kana-index button:focus-visible { outline: 3px solid #91c5a0; outline-offset: 1px; }
-  .kana-index-feedback { position: fixed; z-index: 9; top: 50%; left: 50%; transform: translate(-50%,-50%); display: grid; place-items: center; gap: 8px; min-width: 122px; min-height: 122px; padding: 18px; border: 1px solid #c7dece; border-radius: 24px; color: #22623b; background: #f4fbf6f5; box-shadow: 0 8px 35px #17392626; pointer-events: none; }
-  .kana-index-feedback strong { font-size: 54px; line-height: 1; }
-  .kana-index-feedback span { color: #52755d; font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { .kana-index { transition: none; } }

@@ -240,7 +240,7 @@
     const artistReading = personalView() ? '<div class="cell-scroll reading-scroll" title="アーティスト名の読み仮名"><span class="artist-reading">' + escapeHtml(song.artistKana) + '</span></div>' : '';
     const songReading = personalView() ? '<div class="cell-scroll reading-scroll" title="曲名の読み仮名"><span class="song-reading">' + escapeHtml(song.songKana) + '</span></div>' : '';
     const artistAddButton = personalView() ? '<button class="artist-add-button" type="button" data-action="add-artist" data-id="' + escapeHtml(song.id) + '" title="このアーティストの曲を追加" aria-label="' + escapeHtml(song.artist) + 'の曲を追加"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>' : '';
-    return '<tr class="' + (song.visible ? '' : 'is-hidden-song') + '">' +
+    return '<tr class="' + (song.visible ? '' : 'is-hidden-song') + '" data-song-id="' + escapeHtml(song.id) + '" data-kana-group="' + kanaGroup(song) + '">' +
       '<td><div class="artist-cell"><div class="artist-main"><div class="artist-info"><div class="cell-scroll"><span class="artist-name" title="' + escapeHtml(song.artist) + '">' + escapeHtml(song.artist) + hiddenMark + '</span></div>' + artistReading + '</div>' + artistAddButton + '</div></div></td>' +
       '<td><div class="song-cell"><div class="cell-scroll"><span class="song-name" title="' + escapeHtml(song.title) + '">' + escapeHtml(song.title) + '</span></div>' + songReading + '</div></td>' +
       '<td><div class="key-stack"><div class="key-cell">' + quickKey + '</div>' + (personalView() ? presetSwitcher(song) : '') + '</div></td>' +
@@ -281,7 +281,7 @@
     if (!list.length) {
       $('#song-list').innerHTML = '';
       $('#mobile-song-list').innerHTML = '';
-      $('#load-more').classList.add('hidden');
+      $('#list-pagination').classList.add('hidden');
       updateDataUi();
       return;
     }
@@ -291,7 +291,8 @@
     const notesCol = canEdit ? '<col class="notes">' : '';
     const listType = canEdit ? ' owner-list' : ' public-list';
     const shown = list.slice(0, pageLimit);
-    $('#load-more').classList.toggle('hidden', list.length <= shown.length);
+    $('#list-pagination').classList.toggle('hidden', list.length <= shown.length || loadState !== 'ready');
+    $('#show-all').setAttribute('aria-label','検索・絞り込みに合う全' + list.length + '曲を表示');
     $('#load-more').textContent = 'さらに表示（残り ' + (list.length - shown.length) + ' 曲）';
     if (mobileLayout.matches) {
       if ($('#song-list').hasChildNodes()) $('#song-list').replaceChildren();
@@ -1241,6 +1242,12 @@
     $('#mobile-song-list').addEventListener('click', handleListAction);
     $('#artist-filter').addEventListener('change', () => { pageLimit = 100; render(); });
     $('#load-more').addEventListener('click', () => { pageLimit += 100; render(); });
+    $('#show-all').addEventListener('click', () => {
+      if (loadState !== 'ready') return;
+      const total = filteredSongs().length;
+      pageLimit = total; render();
+      announce('全' + total.toLocaleString('ja-JP') + '曲を表示しました。');
+    });
     $('#artist-picker').addEventListener('input', chooseArtist);
     $('#duplicate-edit').addEventListener('click', () => openSongDialog(songs.find((s) => s.id === $('#duplicate-edit').dataset.id)));
     $('#artist-manage-button').addEventListener('click', openArtistManager);
@@ -1461,20 +1468,22 @@
     const nav = $('#kana-index');
     if (!nav) return;
     kanaNavigation.targets = new Map();
-    if (mobileLayout.matches && $('#sort-mode').value !== 'recent') list.forEach((song,index) => {
+    if ($('#sort-mode').value !== 'recent') list.forEach((song,index) => {
       const group = kanaGroup(song);
       if (!kanaNavigation.targets.has(group)) kanaNavigation.targets.set(group,{id:song.id,index,song});
     });
-    kanaNavigation.enabled = loadState === 'ready' && list.length > 0 && $('#sort-mode').value !== 'recent' && !recoveryMode && Boolean(user || sharedListMode) && mobileLayout.matches;
+    kanaNavigation.enabled = loadState === 'ready' && list.length > 0 && $('#sort-mode').value !== 'recent' && !recoveryMode && Boolean(user || sharedListMode);
     const titleOrder = $('#sort-mode').value === 'title';
     nav.setAttribute('aria-label',(titleOrder ? '曲名' : 'アーティスト名') + 'の五十音インデックス');
     nav.querySelectorAll('button').forEach((button) => {
       const available = kanaNavigation.targets.has(button.dataset.kana);
+      button.setAttribute('aria-controls',mobileLayout.matches ? 'mobile-song-list' : 'song-list');
       button.setAttribute('aria-disabled',String(!available));
       button.setAttribute('aria-label',kanaLabel(button.dataset.kana) + (available ? 'へ移動' : '：該当する曲なし'));
       button.tabIndex = available ? 0 : -1;
     });
-    $('#mobile-song-list').classList.toggle('has-kana-index',kanaNavigation.enabled);
+    $('#mobile-song-list').classList.toggle('has-kana-index',kanaNavigation.enabled && mobileLayout.matches);
+    $('#song-list').classList.toggle('has-kana-index',kanaNavigation.enabled && !mobileLayout.matches);
     $('#kana-index-help').classList.toggle('hidden',!kanaNavigation.enabled);
     if (!kanaNavigation.enabled) {
       finishKanaGesture(false);
@@ -1487,33 +1496,41 @@
     if (kanaNavigation.frame) return;
     kanaNavigation.frame = window.requestAnimationFrame(() => { kanaNavigation.frame=0; positionKanaIndex(); });
   }
+  function kanaItems() {
+    return mobileLayout.matches ? $('#mobile-song-list').children : $('#song-list table')?.tBodies[0]?.rows || [];
+  }
   function positionKanaIndex() {
     const nav = $('#kana-index');
     if (!kanaNavigation.enabled) return nav.classList.add('hidden');
-    if (kanaNavigation.dragging) return; // Keep the rail under the finger during jumps.
+    if (kanaNavigation.dragging) return; // Keep the rail under the pointer during jumps.
+    const mobile = mobileLayout.matches;
     const viewport = window.visualViewport;
     const viewportTop = viewport?.offsetTop || 0;
     const viewportBottom = viewportTop + (viewport?.height || window.innerHeight);
     const controls = $('.library-controls').getBoundingClientRect();
-    const list = $('#mobile-song-list').getBoundingClientRect();
-    const top = Math.max(viewportTop + 12,controls.bottom + 8,list.top);
-    const bottom = Math.min(viewportBottom - 16,list.bottom);
+    const container = mobile ? $('#mobile-song-list') : $('#song-list');
+    const list = container.getBoundingClientRect();
+    const headerBottom = mobile ? list.top : $('#song-list table')?.tHead?.getBoundingClientRect().bottom || list.top;
+    const top = Math.max(viewportTop + 12,controls.bottom + 8,headerBottom + (mobile ? 0 : 4));
+    const bottom = Math.min(viewportBottom - 16,list.bottom - (mobile ? 0 : 4));
     const visible = bottom - top >= 220 && !document.querySelector('dialog[open]');
     nav.classList.toggle('hidden',!visible);
     if (!visible) return;
     const height = Math.min(330,bottom-top);
     nav.style.top = (top + (bottom-top-height)/2) + 'px';
     nav.style.height = height + 'px';
-    // Only measure a logarithmic number of cards, including when many are expanded.
-    const cards = $('#mobile-song-list').children;
-    let low=0,high=cards.length-1;
-    const edge = Math.max(viewportTop,controls.bottom) + 12;
+    nav.style.left = mobile ? '' : (list.right + 8) + 'px';
+    nav.style.right = mobile ? '' : 'auto';
+    // Only measure a logarithmic number of rows/cards during scrolling.
+    const items = kanaItems();
+    let low=0,high=items.length-1;
+    const edge = Math.max(viewportTop,controls.bottom,headerBottom) + 12;
     while (low<high) {
       const middle=Math.floor((low+high)/2);
-      if (cards[middle].getBoundingClientRect().bottom<=edge) low=middle+1;
+      if (items[middle].getBoundingClientRect().bottom<=edge) low=middle+1;
       else high=middle;
     }
-    setKanaCurrent(cards[low]?.dataset.kanaGroup);
+    setKanaCurrent(items[low]?.dataset.kanaGroup);
   }
   function showKanaFeedback(group) {
     window.clearTimeout(kanaNavigation.feedbackTimer);
@@ -1530,10 +1547,20 @@
       pageLimit = Math.ceil((target.index+1)/100)*100;
       render();
     }
-    const card = [...$('#mobile-song-list').children].find((item) => item.dataset.songId === target.id);
-    if (!card) return;
-    const stickyHeight = $('.library-controls').offsetHeight;
-    window.scrollTo({top:Math.max(0,window.scrollY+card.getBoundingClientRect().top-stickyHeight-8),behavior:'auto'});
+    const item = [...kanaItems()].find((row) => row.dataset.songId === target.id);
+    if (!item) return;
+    const controls = $('.library-controls');
+    if (mobileLayout.matches) {
+      window.scrollTo({top:Math.max(0,window.scrollY+item.getBoundingClientRect().top-controls.offsetHeight-8),behavior:'auto'});
+    } else {
+      const container = $('#song-list');
+      const rect = container.getBoundingClientRect();
+      if (rect.top < controls.getBoundingClientRect().bottom) {
+        window.scrollTo({top:Math.max(0,window.scrollY+rect.top-controls.offsetHeight-8),behavior:'auto'});
+      }
+      const headerHeight = $('#song-list table').tHead.offsetHeight;
+      container.scrollTo({top:Math.max(0,container.scrollTop+item.getBoundingClientRect().top-container.getBoundingClientRect().top-headerHeight-4),behavior:'auto'});
+    }
     kanaNavigation.jumpedGroup = group;
     setKanaCurrent(group);
     if (spoken) $('#kana-index-status').textContent = kanaLabel(group) + '、' + target.song.artist + '、' + target.song.title + 'へ移動しました。';
@@ -1593,6 +1620,7 @@
       buttons[next].focus({preventScroll:true}); jumpKana(buttons[next].dataset.kana,true);
     });
     window.addEventListener('scroll',scheduleKanaLayout,{passive:true});
+    $('#song-list').addEventListener('scroll',scheduleKanaLayout,{passive:true});
     window.addEventListener('resize',scheduleKanaLayout,{passive:true});
     mobileLayout.addEventListener('change',() => render());
     window.visualViewport?.addEventListener('resize',scheduleKanaLayout,{passive:true});

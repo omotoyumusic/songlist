@@ -12,11 +12,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261017-spacing-1">
+  <link rel="stylesheet" href="styles.css?v=20261019-list-controls-1">
   <script src="config.js"></script>
   <script defer src="songlist-core.js?v=20261017-kana-index-1"></script>
   <script defer src="songlist-practice.js?v=20261017-kana-index-1"></script>
-  <script defer src="app.js?v=20261017-loading-1"></script>
+  <script defer src="app.js?v=20261019-list-controls-1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -109,12 +109,12 @@
         </div>
       </div>
 
-      <p id="search-help" class="search-help">スペースで区切ると、アーティスト名と曲名を組み合わせて検索できます。<span id="kana-index-help" class="hidden">右端の「あ・か…」をタップ、またはなぞって移動できます。</span></p>
+      <p id="search-help" class="search-help">スペースで区切ると、アーティスト名と曲名を組み合わせて検索できます。<span id="kana-index-help" class="hidden">右端の「あ・か…」で読み仮名の行に移動できます。</span></p>
       <div class="list-meta"><span id="result-count" role="status" aria-live="polite">曲を表示しています</span><span class="sort-note"><span class="sort-symbol">↕</span> 五十音順</span></div>
       </div>
       <div id="song-list" class="table-wrap"><div class="loading-state"><span class="loader"></span>リストを準備しています</div></div>
       <div id="mobile-song-list" class="mobile-song-list"></div>
-      <button id="load-more" class="button button-outline load-more hidden" type="button">さらに表示</button>
+      <div id="list-pagination" class="list-pagination hidden"><button id="load-more" class="button button-outline load-more" type="button">さらに表示</button><button id="show-all" class="button button-outline" type="button">全て表示</button></div>
       <div id="empty-state" class="empty-state hidden"><div class="empty-music" aria-hidden="true">♪</div><strong id="empty-title">曲が見つかりませんでした</strong><p id="empty-description">検索キーワードや絞り込み条件を変えてみてください。</p><button id="empty-add" class="button button-green hidden" type="button">最初の曲を追加</button><button id="empty-clear" class="button button-outline hidden" type="button">検索をクリア</button></div>
     </section>
 

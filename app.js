@@ -223,14 +223,8 @@
     const relative = parallelKey(key);
     const original = song.key || '—';
     const chordSearch = '<button class="search-menu-button" type="button" data-action="search-menu" data-id="' + escapeHtml(song.id) + '" title="Chordwiki・YouTube・YouTubeカラオケ・コード譜検索" aria-label="' + escapeHtml(song.title) + 'を検索">検索 ▾</button>';
-    const visibilityIcon = song.visible
-      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>'
-      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 6.1A10 10 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3.1 3.7M6.2 6.2C3.4 8 2 12 2 12s3.5 6 10 6c1.3 0 2.5-.3 3.5-.7"/></svg>';
-    const adminActions = personalView()
-      ? actionButton('toggle-visible', song.id, '', song.visible ? '一覧から非表示にする' : '一覧に表示する', visibilityIcon) + actionButton('sung', song.id, '', '今日歌った', '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15l2 2 5-5"/></svg>', 'recorded') + actionButton('edit', song.id, '', '編集', '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5 4 4M4 20l4-.8L19.5 7.7a2.12 2.12 0 0 0-3-3L5 16.2 4 20Z"/></svg>') + actionButton('delete', song.id, '', '削除', '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v6m6-6v6"/></svg>')
-      : '';
     const searchCell = '<td class="search-cell"><div class="row-actions search-actions">' + chordSearch + '</div></td>';
-    const actionCell = personalView() ? '<td><div class="row-actions">' + adminActions + '</div></td>' : '';
+    const actionCell = personalView() ? '<td class="operations-cell"><button class="operation-menu-button" type="button" data-action="operation-menu" data-id="' + escapeHtml(song.id) + '" aria-haspopup="dialog" aria-controls="operation-dialog" aria-label="' + escapeHtml(song.artist + ' ' + song.title + 'の操作') + '" title="曲の操作"><span aria-hidden="true">⚙️</span></button></td>' : '';
     const transposeLabel = '(' + signed(song.transpose) + ')';
     const quickKey = personalView()
       ? '<span class="transpose-label key-chip">' + escapeHtml(transposeLabel) + '</span><span class="base-key">' + escapeHtml(original) + '</span><span class="key-arrow">→</span><button class="key-nudge" type="button" data-action="transpose" data-delta="-1" data-id="' + escapeHtml(song.id) + '" aria-label="半音下げる">−</button><span class="key-chip" title="自分が歌うキー">' + escapeHtml(key || '—') + '</span><button class="key-nudge" type="button" data-action="transpose" data-delta="1" data-id="' + escapeHtml(song.id) + '" aria-label="半音上げる">＋</button><span class="parallel-link">/</span><span class="parallel-chip" title="平行調">' + escapeHtml(relative || '—') + '</span>'
@@ -243,9 +237,9 @@
     return '<tr class="' + (song.visible ? '' : 'is-hidden-song') + '" data-song-id="' + escapeHtml(song.id) + '" data-kana-group="' + kanaGroup(song) + '">' +
       '<td><div class="artist-cell"><div class="artist-main"><div class="artist-info"><div class="cell-scroll"><span class="artist-name" title="' + escapeHtml(song.artist) + '">' + escapeHtml(song.artist) + hiddenMark + '</span></div>' + artistReading + '</div>' + artistAddButton + '</div></div></td>' +
       '<td><div class="song-cell"><div class="cell-scroll"><span class="song-name" title="' + escapeHtml(song.title) + '">' + escapeHtml(song.title) + '</span></div>' + songReading + '</div></td>' +
-      '<td><div class="key-stack"><div class="key-cell">' + quickKey + '</div>' + (personalView() ? presetSwitcher(song) : '') + '</div></td>' +
+      '<td class="key-column-cell"><div class="key-stack"><div class="key-cell">' + quickKey + '</div>' + (personalView() ? presetSwitcher(song) : '') + '</div></td>' +
       searchCell +
-      '<td><div class="cell-scroll date-scroll"><span class="date-cell ' + (song.lastSung ? 'date-recorded' : 'date-empty') + '">' + escapeHtml(formatDate(song.lastSung)) + '</span>' + (personalView() ? '<button class="history-link" type="button" data-action="history" data-id="' + escapeHtml(song.id) + '">履歴 ' + Practice.get(song).history.length + '回</button>' : '') + '</div></td>' +
+      '<td class="last-cell"><div class="cell-scroll date-scroll"><span class="date-cell ' + (song.lastSung ? 'date-recorded' : 'date-empty') + '">' + escapeHtml(formatDate(song.lastSung)) + '</span>' + (personalView() ? '<button class="history-link" type="button" data-action="history" data-id="' + escapeHtml(song.id) + '">履歴 ' + Practice.get(song).history.length + '回</button>' : '') + '</div></td>' +
       notesCell + actionCell + '</tr>';
   }
 
@@ -285,7 +279,7 @@
       updateDataUi();
       return;
     }
-    const actionHead = canEdit ? '<th scope="col">操作</th>' : '';
+    const actionHead = canEdit ? '<th class="actions-heading" scope="col"><span class="fit-heading">操作</span></th>' : '';
     const actionCol = canEdit ? '<col class="actions">' : '';
     const notesHead = canEdit ? '<th scope="col">備考</th>' : '';
     const notesCol = canEdit ? '<col class="notes">' : '';
@@ -300,7 +294,8 @@
       $('#mobile-song-list').querySelectorAll('.song-card').forEach((card) => { card.open = openMobileSongs.has(card.dataset.songId); });
     } else {
       if ($('#mobile-song-list').hasChildNodes()) $('#mobile-song-list').replaceChildren();
-      $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th scope="col">（移調）原曲 → 歌うキー / 平行調</th><th class="search-heading" scope="col" title="Chordwiki・YouTube・YouTubeカラオケ・コード譜検索">検索</th><th scope="col">最後に歌った日</th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
+      $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th class="key-heading" scope="col"><span class="fit-heading">（移調）原曲 → 歌うキー / 平行調</span></th><th class="search-heading" scope="col" title="Chordwiki・YouTube・YouTubeカラオケ・コード譜検索"><span class="fit-heading">検索</span></th><th class="last-heading" scope="col"><span class="fit-heading">最後に歌った日</span></th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
+      fitTableColumns();
     }
     updateDataUi();
     if (focusKey) [...document.querySelectorAll('[data-action]')].find((el) => el.dataset.action === focusKey.action && el.dataset.id === focusKey.id && el.dataset.delta === focusKey.delta && el.offsetParent)?.focus({preventScroll:true});
@@ -608,6 +603,7 @@
     const song = songs.find((item) => item.id === button.dataset.id);
     if (!song) return;
     if (action === 'search-menu') return openSearchMenu(song);
+    if (action === 'operation-menu') { if (canMutate()) openOperationMenu(song); return; }
     if (action === 'history') return openHistory(song.id);
     if (action === 'chord-search') {
       window.open('https://www.google.com/search?q=' + encodeURIComponent(song.artist + ' ' + song.title + ' Chordwiki'), '_blank', 'noopener,noreferrer');
@@ -1226,6 +1222,13 @@
     finally { $('#recovery-submit').disabled = false; }
   }
   function setupUpgradeEvents() {
+    $('#operation-items').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action]');
+      if (!button || button.disabled) return;
+      $('#operation-dialog').close();
+      void handleListAction(event);
+    });
+    document.fonts?.ready.then(() => { fitTableColumns(); scheduleKanaLayout(); });
     const closeSearchMenu = (event) => {
       if (event.defaultPrevented || (event.type === 'auxclick' && event.button !== 1)) return;
       if (event.target.closest('a[href]')) $('#search-dialog').close();
@@ -1291,6 +1294,36 @@
     $('#search-destinations').innerHTML = searchLinks(song);
     $('#search-dialog').showModal();
   }
+  function openOperationMenu(song) {
+    $('#operation-song-name').textContent = song.artist + ' / ' + song.title;
+    const visibilityLabel = song.visible ? '閲覧用から非表示にする' : '閲覧用に表示する';
+    $('#operation-items').innerHTML = [
+      ['toggle-visible', visibilityLabel], ['sung', '今日歌った'],
+      ['edit', '編集'], ['delete', '削除']
+    ].map(([action, label]) => actionButton(action, song.id, label, label)).join('');
+    updateDataUi();
+    $('#operation-dialog').showModal();
+  }
+
+  function fitTableColumns() {
+    const table = $('#song-list table');
+    if (!table || mobileLayout.matches) return;
+    // Measure natural content widths, including cell padding, before sizing columns.
+    const measure = (selector) => Math.ceil(Math.max(0, ...[...table.querySelectorAll(selector)].map((element) => {
+      const cell = element.closest('td, th');
+      const style = getComputedStyle(cell);
+      return element.getBoundingClientRect().width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    }))) + 2;
+    const widths = [
+      ['key', measure('.key-cell, .key-heading .fit-heading')],
+      ['search', measure('.search-menu-button, .search-heading .fit-heading')],
+      ['last', measure('.date-scroll, .last-heading .fit-heading')]
+    ];
+    if (table.classList.contains('owner-list')) widths.push(['actions', measure('.operation-menu-button, .actions-heading .fit-heading')]);
+    widths.forEach(([name, width]) => table.style.setProperty('--' + name + '-column-width', width + 'px'));
+    scheduleKanaLayout();
+  }
+
   function presetSwitcher(song) {
     const practice = Practice.get(song);
     return '<div class="preset-switcher"><select data-action="select-preset" data-id="' + escapeHtml(song.id) + '" aria-label="' + escapeHtml(song.title) + 'のキー設定">' + practice.presets.map((p) => '<option value="' + escapeHtml(p.id) + '"' + (p.id === practice.activePresetId ? ' selected' : '') + '>' + escapeHtml(p.name + ' (' + signed(p.transpose) + ')') + '</option>').join('') + '</select><button type="button" data-action="key-settings" data-id="' + escapeHtml(song.id) + '" title="キー設定を追加・編集" aria-label="' + escapeHtml(song.title) + 'のキー設定を編集">設定</button></div>';

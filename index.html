@@ -12,11 +12,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261020-date-column-1">
+  <link rel="stylesheet" href="styles.css?v=20261020-fit-columns-1">
   <script src="config.js"></script>
   <script defer src="songlist-core.js?v=20261017-kana-index-1"></script>
   <script defer src="songlist-practice.js?v=20261017-kana-index-1"></script>
-  <script defer src="app.js?v=20261020-karaoke-search-1"></script>
+  <script defer src="app.js?v=20261020-fit-columns-1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -151,6 +151,8 @@
   </dialog>
 
   <dialog id="search-dialog" class="modal search-modal" aria-labelledby="search-dialog-title"><div class="dialog-content"><div class="modal-heading"><h2 id="search-dialog-title">検索先を選ぶ</h2><button class="icon-button" type="button" data-close="search-dialog" aria-label="閉じる">×</button></div><p id="search-song-name"></p><div id="search-destinations" class="search-destinations"></div><p class="subtle">検索結果を新しいタブで開きます。</p></div></dialog>
+
+  <dialog id="operation-dialog" class="modal operation-modal" aria-labelledby="operation-dialog-title"><div class="dialog-content"><div class="modal-heading"><h2 id="operation-dialog-title">曲の操作</h2><button class="icon-button" type="button" data-close="operation-dialog" aria-label="閉じる">×</button></div><p id="operation-song-name"></p><div id="operation-items" class="operation-items"></div></div></dialog>
 
   <dialog id="history-dialog" class="modal history-modal" aria-labelledby="history-dialog-title">
     <form id="history-form">

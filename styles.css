@@ -392,3 +392,32 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   .mobile-song-list.has-kana-index { padding-right: 43px; }
 }
 @media (prefers-reduced-motion: reduce) { .kana-index { transition: none; } }
+
+/* Keep key, search, date and operations fully visible at their natural widths. */
+.operation-menu-button { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid #d8e6dc; border-radius: 7px; color: #396149; background: #f8fcf9; font-size: 17px; cursor: pointer; }
+.operation-menu-button:hover { background: #eaf5ed; }
+.operation-menu-button:focus-visible { outline: 3px solid #8bcba0; outline-offset: 2px; }
+.operations-cell, .actions-heading { text-align: center !important; }
+.operation-modal { width: min(390px, calc(100vw - 32px)); }
+#operation-song-name { line-height: 1.7; overflow-wrap: anywhere; }
+.operation-items { display: grid; gap: 10px; margin-top: 20px; }
+.operation-items .row-action { display: flex; justify-content: flex-start; width: 100%; height: auto; min-height: 48px; padding: 10px 14px; border-color: #d8e6dc; color: #396149; background: #f8fcf9; font-size: 13px; line-height: 1.6; text-align: left; }
+.operation-items [data-action="delete"] { color: #a34136; border-color: #eccac5; background: #fff8f6; }
+@media (min-width: 701px) {
+  .song-table { --key-column-width: 230px; --search-column-width: 48px; --last-column-width: 82px; --actions-column-width: 44px; --fixed-columns-width: calc(var(--key-column-width) + var(--search-column-width) + var(--last-column-width)); }
+  .song-table.owner-list { --key-column-width: 320px; --fixed-columns-width: calc(var(--key-column-width) + var(--search-column-width) + var(--last-column-width) + var(--actions-column-width)); }
+  .song-table:is(.owner-list, .authenticated-list, .public-list) col.key { width: var(--key-column-width); }
+  .song-table:is(.owner-list, .authenticated-list, .public-list) col.search { width: var(--search-column-width); }
+  .song-table:is(.owner-list, .authenticated-list, .public-list) col.last { width: var(--last-column-width); }
+  .song-table.owner-list col.actions { width: var(--actions-column-width); }
+  .song-table:is(.owner-list, .authenticated-list) col.artist { width: calc((100% - var(--fixed-columns-width)) * .32); }
+  .song-table:is(.owner-list, .authenticated-list) col.title { width: calc((100% - var(--fixed-columns-width)) * .43); }
+  .song-table:is(.owner-list, .authenticated-list) col.notes { width: calc((100% - var(--fixed-columns-width)) * .25); }
+  .song-table.public-list col.artist { width: calc((100% - var(--fixed-columns-width)) * .448); }
+  .song-table.public-list col.title { width: calc((100% - var(--fixed-columns-width)) * .552); }
+  .song-table .fit-heading { display: inline-block; width: max-content; white-space: nowrap; }
+  .song-table .key-cell { width: max-content; max-width: none; gap: 4px; overflow: visible; }
+  .song-table .key-chip, .song-table .parallel-chip { padding-inline: 5px; }
+  .song-table .search-actions { width: max-content; max-width: none; margin-inline: auto; overflow: visible; }
+  .song-table .date-scroll { width: max-content; max-width: none; overflow: visible; }
+}

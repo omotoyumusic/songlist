@@ -180,7 +180,12 @@
   }
 
   function sortSongs(list, mode = $('#sort-mode').value) {
+    const counts = mode === 'count' ? new Map(list.map((song) => [song.id, Practice.get(song).history.length])) : null;
     return list.sort((left, right) => {
+      if (counts) {
+        const difference = counts.get(right.id) - counts.get(left.id);
+        if (difference) return difference;
+      }
       if (mode === 'recent') return (right.lastSung || '').localeCompare(left.lastSung || '') || collator.compare(left.artist, right.artist) || collator.compare(left.title, right.title);
       const storedOrderField = mode === 'title' ? 'titleSortIndex' : 'artistSortIndex';
       const storedOrder = sharedListMode && Number.isInteger(left[storedOrderField]) && Number.isInteger(right[storedOrderField])
@@ -265,7 +270,7 @@
     const isFiltered = Boolean($('#search-input').value.trim() || $('#artist-filter').value || (personalView() && $('#practice-filter').value));
     $('#search-clear').classList.toggle('hidden', !isFiltered);
     $('#result-count').textContent = isFiltered ? '検索結果 ' + list.length.toLocaleString('ja-JP') + ' 曲' : '全 ' + list.length.toLocaleString('ja-JP') + ' 曲';
-    $('.sort-note').innerHTML = '<span class="sort-symbol">↕</span> ' + ({ artist: 'アーティスト五十音順', title: '曲名五十音順', recent: '最後に歌った日順' }[$('#sort-mode').value] || 'アーティスト五十音順');
+    $('.sort-note').innerHTML = '<span class="sort-symbol">↕</span> ' + ({ artist: 'アーティスト五十音順', title: '曲名五十音順', recent: '最後に歌った日順', count: '歌唱回数が多い順' }[$('#sort-mode').value] || 'アーティスト五十音順');
     $('#empty-state').classList.toggle('hidden', list.length > 0 || loadState !== 'ready');
     const emptyLibrary = canEdit && loadState === 'ready' && songs.length === 0;
     $('#empty-title').textContent = emptyLibrary ? '最初の1曲を登録しましょう' : '曲が見つかりませんでした';
@@ -303,6 +308,9 @@
 
   function updateAccessUi() {
     const canShowApp = Boolean(user || sharedListMode);
+    $('#sort-count-option').hidden = !personalView();
+    $('#sort-count-option').disabled = !personalView();
+    if (!personalView() && $('#sort-mode').value === 'count') $('#sort-mode').value = 'artist';
     if (!user) document.querySelectorAll('dialog[open]').forEach((d) => d.close());
     $('#auth-gate').classList.toggle('hidden', canShowApp || recoveryMode);
     $('#recovery-gate').classList.toggle('hidden', !recoveryMode);
@@ -920,7 +928,7 @@
     const params = new URLSearchParams(window.location.search);
     sharedListMode = Boolean(params.get('list'));
     if (sharedListMode) updateAccessUi();
-    if (params.get('sort') === 'title' || params.get('sort') === 'recent') $('#sort-mode').value = params.get('sort');
+    if (['title','recent'].includes(params.get('sort')) || (!sharedListMode && params.get('sort') === 'count')) $('#sort-mode').value = params.get('sort');
     $('#add-button').addEventListener('click', () => openSongDialog(null));
     setupUpgradeEvents();
     setupPracticeEvents();
@@ -1162,7 +1170,8 @@
   }
   function viewerUrl(id) {
     const url = new URL(window.location.pathname, window.location.origin);
-    url.searchParams.set('list', id); url.searchParams.set('sort', $('#sort-mode').value); return url.toString();
+    const sort = $('#sort-mode').value;
+    url.searchParams.set('list', id); url.searchParams.set('sort', sort === 'count' ? 'artist' : sort); return url.toString();
   }
   async function manageShare(action) {
     if (!personalView() || loadState !== 'ready' || dirty || saving) return;
@@ -1508,11 +1517,12 @@
     const nav = $('#kana-index');
     if (!nav) return;
     kanaNavigation.targets = new Map();
-    if ($('#sort-mode').value !== 'recent') list.forEach((song,index) => {
+    const alphabetical = ['artist','title'].includes($('#sort-mode').value);
+    if (alphabetical) list.forEach((song,index) => {
       const group = kanaGroup(song);
       if (!kanaNavigation.targets.has(group)) kanaNavigation.targets.set(group,{id:song.id,index,song});
     });
-    kanaNavigation.enabled = loadState === 'ready' && list.length > 0 && $('#sort-mode').value !== 'recent' && !recoveryMode && Boolean(user || sharedListMode);
+    kanaNavigation.enabled = loadState === 'ready' && list.length > 0 && alphabetical && !recoveryMode && Boolean(user || sharedListMode);
     const titleOrder = $('#sort-mode').value === 'title';
     nav.setAttribute('aria-label',(titleOrder ? '曲名' : 'アーティスト名') + 'の五十音インデックス');
     nav.querySelectorAll('button').forEach((button) => {

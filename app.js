@@ -1388,7 +1388,7 @@
   }
   function renderHistory() {
     const songId = $('#history-song-filter').value, month = $('#history-month').value;
-    const records = songs.flatMap((song) => Practice.get(song).history.map((record) => ({song,record}))).filter(({song,record}) => (!songId || song.id === songId) && (!month || record.date.startsWith(month))).sort((a,b) => b.record.date.localeCompare(a.record.date) || collator.compare(a.song.artist,b.song.artist) || collator.compare(a.song.title,b.song.title) || a.record.id.localeCompare(b.record.id));
+    const records = songs.flatMap((song) => Practice.get(song).history.map((record) => ({song,record}))).filter(({song,record}) => (!songId || song.id === songId) && (!month || record.date.startsWith(month))).sort((a,b) => Practice.compareRecordsNewestFirst(a.record,b.record) || collator.compare(a.song.artist,b.song.artist) || collator.compare(a.song.title,b.song.title) || a.record.id.localeCompare(b.record.id));
     $('#history-summary').textContent = records.length + '回の記録・' + new Set(records.map((r) => r.record.date)).size + '日・' + new Set(records.map((r) => r.song.id)).size + '曲';
     $('#history-legacy-note').classList.toggle('hidden', !records.some(({record}) => record.legacy));
     $('#history-records').innerHTML = records.length ? records.slice(0,historyLimit).map(({song,record}) => {
@@ -1412,7 +1412,7 @@
       const presetId = $('#history-add-preset').value;
       const preset = practice.presets.find((p) => p.id === presetId);
       if (presetId !== '$keep' && !preset) return showError($('#history-error'),'キー設定が変更されています。記録を開き直してください。');
-      const replacement = presetId === '$keep' ? { ...old,date } : { id:old.id,date,key:song.key,transpose:preset.transpose,presetName:preset.name };
+      const replacement = presetId === '$keep' ? { ...old,date } : { ...old,date,key:song.key,transpose:preset.transpose,presetName:preset.name,legacy:false };
       practice.history = practice.history.map((r) => r.id === old.id ? replacement : r);
       updated = Practice.put(song,practice);
     } else updated = Practice.addRecord(song,date,crypto.randomUUID(),$('#history-add-preset').value);

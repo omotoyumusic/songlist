@@ -27,8 +27,16 @@
     if (!validDate(date)) throw new Error('Invalid date');
     const practice = get(song), preset = practice.presets.find((p) => p.id === presetId) || practice.presets.find((p) => p.id === practice.activePresetId);
     if (practice.history.some((r) => r.id === id)) return song;
-    practice.history.push({ id, date, key: song.key, transpose: preset.transpose, presetName: preset.name });
+    practice.history.push({ id, date, recordedAt: new Date().toISOString(), key: song.key, transpose: preset.transpose, presetName: preset.name });
     return put(song, practice);
+  }
+  function recordTime(record) {
+    // Old date-only records retain their unknown time; never invent one on read.
+    const time = typeof record?.recordedAt === 'string' ? Date.parse(record.recordedAt) : NaN;
+    return Number.isFinite(time) ? time : 0;
+  }
+  function compareRecordsNewestFirst(left, right) {
+    return String(right?.date || '').localeCompare(String(left?.date || '')) || recordTime(right) - recordTime(left);
   }
   function setPreset(song, id) {
     const practice = get(song);
@@ -41,5 +49,5 @@
     practice.presets.find((p) => p.id === practice.activePresetId).transpose = shift(value);
     return put(song, practice);
   }
-  root.SonglistPractice = { validDate, shift, get, put, addRecord, setPreset, transpose };
+  root.SonglistPractice = { validDate, shift, get, put, addRecord, compareRecordsNewestFirst, setPreset, transpose };
 })(typeof window === 'undefined' ? globalThis : window);

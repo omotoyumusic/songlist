@@ -16,7 +16,7 @@
   <script src="config.js"></script>
   <script defer src="songlist-core.js?v=20261017-kana-index-1"></script>
   <script defer src="songlist-practice.js?v=20261024-history-time-1"></script>
-  <script defer src="app.js?v=20261024-count-sort-1"></script>
+  <script defer src="app.js?v=20261027-debug-1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -169,7 +169,7 @@
     <form id="import-form" method="dialog">
       <div class="modal-heading"><div><p class="eyebrow">CSV IMPORT</p><h2>CSVを取り込む</h2></div><button class="icon-button" type="button" data-close="import-dialog" aria-label="閉じる">×</button></div>
       <p id="import-summary" class="auth-description"></p>
-      <label class="radio-option"><input type="radio" name="import-mode" value="merge" checked><span><strong>追加・更新する</strong><small>アーティスト名と曲名が一致する行を更新し、それ以外を追加します。</small></span></label>
+      <label class="radio-option"><input type="radio" name="import-mode" value="merge" checked><span><strong>追加・更新する</strong><small>アーティスト名と曲名が一致する行を更新し、それ以外を追加します。CSVにない項目は現在の値を保持します。</small></span></label>
       <label class="radio-option"><input type="radio" name="import-mode" value="replace"><span><strong>すべて置き換える</strong><small>現在のリストをCSVの内容に置き換えます。</small></span></label>
       <div id="import-error" class="form-error hidden" role="alert"></div>
       <div class="modal-actions"><button class="button button-outline" type="button" data-close="import-dialog">キャンセル</button><button class="button button-green" type="submit">取り込む</button></div>

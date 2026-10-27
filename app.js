@@ -737,26 +737,38 @@
   async function deleteAccount() {
     if (!user || !supabase) return;
     if (saving) return announce('保存が完了してからアカウントを削除してください。');
+    const accountId = user.id;
     const confirmation = 'アカウントと曲リストを削除します。元に戻せません。続けますか？';
     if (!window.confirm(confirmation)) return;
     $('#delete-account-error').classList.add('hidden');
     $('#delete-account-button').disabled = true;
     $('#delete-account-button').textContent = '削除しています…';
-    const { error } = await supabase.functions.invoke('delete-songlist-account', { method: 'POST' });
-    $('#delete-account-button').disabled = false;
-    $('#delete-account-button').textContent = 'アカウントを削除';
-    if (error) {
-      showError($('#delete-account-error'), 'アカウントを削除できませんでした。管理者にお問い合わせください。');
+    try {
+      const { error } = await supabase.functions.invoke('delete-songlist-account', { method: 'POST' });
+      if (error) throw error;
+    } catch (_) {
+      showError($('#delete-account-error'), 'アカウントの削除を確認できませんでした。通信状態を確認し、再度お試しください。');
+      return;
+    } finally {
+      $('#delete-account-button').disabled = false;
+      $('#delete-account-button').textContent = 'アカウントを削除';
+    }
+    let draftCleanupFailed = false;
+    try { for (const draft of drafts.list(accountId)) drafts.remove(accountId, draft.draftId); }
+    catch (_) { draftCleanupFailed = true; }
+    if (user && user.id !== accountId) {
+      announce(draftCleanupFailed ? 'アカウントを削除しました。端末に残った下書きはブラウザーのサイトデータから削除してください。' : 'アカウントを削除しました。');
       return;
     }
-    for (const draft of drafts.list(user.id)) drafts.remove(user.id, draft.draftId);
     dirty = false; pendingDrafts = [];
     try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) { /* The account was already removed. */ }
+    if (user && user.id !== accountId) return;
+    ++loadGeneration; activeListLoad = null; openMobileSongs.clear();
     user = null;
-    songs = [];
+    songs = []; baseSongs = []; conflictState = null; shareRecord = null; revision = 0; loadState = 'idle';
     $('#account-settings-dialog').close();
     updateAccessUi();
-    announce('アカウントを削除しました。');
+    announce(draftCleanupFailed ? 'アカウントを削除しました。端末に残った下書きはブラウザーのサイトデータから削除してください。' : 'アカウントを削除しました。');
   }
 
   function csvCell(value) {
@@ -793,6 +805,7 @@
       else if (char === '\n') { row.push(value.replace(/\r$/, '')); rows.push(row); row = []; value = ''; }
       else value += char;
     }
+    if (quoted) throw new Error('CSVの引用符が閉じられていません。ファイルの内容を確認してください。');
     if (value || row.length) { row.push(value.replace(/\r$/, '')); rows.push(row); }
     return rows;
   }
@@ -837,7 +850,23 @@
       const normalizedDate = /^\d{8}$/.test(rawDate) ? rawDate.slice(0, 4) + '-' + rawDate.slice(4, 6) + '-' + rawDate.slice(6, 8) : rawDate;
       let extra = {};
       const rawExtra = original ? null : valueAt(row, 'extra', '');
-      if (rawExtra) { try { extra = JSON.parse(rawExtra); } catch (_) { extra = {}; } }
+      if (rawExtra) {
+        try {
+          extra = JSON.parse(rawExtra);
+          if (!extra || typeof extra !== 'object' || Array.isArray(extra)) throw new Error('Invalid additional data');
+          if (Object.hasOwn(extra, 'practice')) {
+            const practice = extra.practice;
+            if (!practice || typeof practice !== 'object' || Array.isArray(practice)) throw new Error('Invalid practice data');
+            if (Object.hasOwn(practice, 'history')) {
+              const history = practice.history;
+              if (!Array.isArray(history) || history.some((record) => !record || !record.id || !Practice.validDate(record.date)) ||
+                  new Set(history.map((record) => String(record.id))).size !== history.length) throw new Error('Invalid singing history');
+            }
+          }
+        } catch (_) {
+          throw new Error('「' + artist + ' / ' + title + '」の追加データ(JSON)を読み取れません。CSVの内容を確認してください。');
+        }
+      }
       if (original) {
         extra = {
           ve500: cleanImportedCell(row[3]),
@@ -849,7 +878,7 @@
           tempo: cleanImportedCell(row[18]), content: cleanImportedCell(row[19]), voice: cleanImportedCell(row[20]), season: cleanImportedCell(row[21])
         };
       }
-      imported.push(normalizeSong({
+      const importedSong = normalizeSong({
         id: original ? '' : valueAt(row, 'id', ''),
         artistKana: original ? cleanImportedCell(row[0]) : valueAt(row, 'artistKana', getKanaInitial(artist)),
         artist, songKana: original ? getKanaInitial(title) : valueAt(row, 'songKana', getKanaInitial(title)), title,
@@ -857,35 +886,86 @@
         transpose: match ? Number(match[0]) : 0,
         lastSung: normalizedDate, notes: original ? cleanImportedCell(row[12]) : valueAt(row, 'notes', ''),
         visible: original ? true : valueAt(row, 'visible', 'true').toLowerCase() !== 'false', extra
-      }, imported.length));
+      }, imported.length);
+      if (!original && rawExtra && Array.isArray(extra.practice?.history) && extra.practice.history.length) {
+        const latest = extra.practice.history.map((record) => record.date).sort().at(-1);
+        if (columns.lastSung < 0) importedSong.lastSung = latest;
+        else if (importedSong.lastSung !== latest) {
+          throw new Error('「' + artist + ' / ' + title + '」の最後に歌った日と歌唱履歴が一致しません。CSVの内容を確認してください。');
+        }
+      }
+      // Keep column presence until merge, so partial CSVs cannot erase missing fields.
+      importedSong._importFields = {
+        artistKana: !original && columns.artistKana >= 0,
+        songKana: !original && columns.songKana >= 0,
+        key: original || columns.key >= 0,
+        transpose: original || columns.transpose >= 0,
+        lastSung: original || columns.lastSung >= 0,
+        notes: original || columns.notes >= 0,
+        visible: !original && columns.visible >= 0,
+        extra: !original && columns.extra >= 0 && Boolean(rawExtra)
+      };
+      imported.push(importedSong);
     }
     if (!imported.length) throw new Error('取り込める曲データがありません。');
     return imported;
   }
 
+  function mergeImportedSongs(existingSongs, incomingSongs) {
+    const merged = existingSongs.slice();
+    const indexes = new Map();
+    existingSongs.forEach((song, index) => {
+      const key = songIdentity(song);
+      if (!indexes.has(key)) indexes.set(key, []);
+      indexes.get(key).push(index);
+    });
+    const claimedIds = new Set(existingSongs.map((song) => song.id));
+    const incomingKeys = new Set();
+    incomingSongs.forEach((incoming) => {
+      const key = songIdentity(incoming);
+      if (incomingKeys.has(key)) throw new Error('CSV内で「' + incoming.artist + ' / ' + incoming.title + '」が重複しています。行を整理してから取り込んでください。');
+      incomingKeys.add(key);
+      const matches = indexes.get(key) || [];
+      if (matches.length > 1) throw new Error('既存リストで「' + incoming.artist + ' / ' + incoming.title + '」が重複しています。曲名を区別してから取り込んでください。');
+      const current = matches.length ? merged[matches[0]] : null;
+      let newId = current && current.id;
+      if (!newId && incoming.id && !claimedIds.has(incoming.id)) newId = incoming.id;
+      if (!newId) newId = crypto.randomUUID();
+      claimedIds.add(newId);
+      const updates = { ...incoming };
+      if (current) {
+        for (const field of ['artistKana','songKana','key','transpose','lastSung','notes','visible']) {
+          if (!incoming._importFields?.[field]) updates[field] = current[field];
+        }
+        if (!incoming._importFields?.extra) {
+          updates.extra = { ...current.extra, ...incoming.extra };
+          if (Array.isArray(current.extra?.practice?.history) && updates.lastSung !== current.lastSung) {
+            throw new Error('「' + current.artist + ' / ' + current.title + '」の最後に歌った日は、歌唱履歴から変更してください。CSVで復元する場合は追加データ(JSON)も含めてください。');
+          }
+        }
+      }
+      if (incoming._importFields?.extra && !incoming._importFields.lastSung && Array.isArray(updates.extra?.practice?.history)) {
+        updates.lastSung = Practice.get({ ...current, ...updates }).history.map((record) => record.date).sort().at(-1) || '';
+      }
+      const next = normalizeSong({ ...current, ...updates, id: newId }, merged.length);
+      if (matches.length) merged[matches[0]] = next;
+      else { indexes.set(key, [merged.length]); merged.push(next); }
+    });
+    return merged;
+  }
+
   async function processImport(event) {
     event.preventDefault();
     if (!canMutate()) return;
-    const beforeImport = songs;
     const mode = new FormData($('#import-form')).get('import-mode');
+    let importedSongs;
     if (mode === 'replace') {
       if (!window.confirm('現在の' + songs.length + '曲を、CSVの' + pendingImport.length + '曲で置き換えますか？')) return;
-      songs = pendingImport.map((song, index) => normalizeSong({ ...song, id: song.id || 'import-' + Date.now() + '-' + index }, index));
+      importedSongs = pendingImport.map((song, index) => normalizeSong({ ...song, id: song.id || 'import-' + Date.now() + '-' + index }, index));
     } else {
-      const merged = new Map(songs.map((song) => [songIdentity(song), song]));
-      const claimedIds = new Set(songs.map((song) => song.id));
-      pendingImport.forEach((incoming) => {
-        const key = songIdentity(incoming);
-        const current = merged.get(key);
-        let newId = current && current.id;
-        if (!newId && incoming.id && !claimedIds.has(incoming.id)) newId = incoming.id;
-        if (!newId) newId = crypto.randomUUID();
-        claimedIds.add(newId);
-        merged.set(key, normalizeSong({ ...current, ...incoming, id: newId }, merged.size));
-      });
-      songs = Array.from(merged.values());
+      try { importedSongs = mergeImportedSongs(songs, pendingImport); }
+      catch (error) { return showError($('#import-error'), error.message || 'CSVを取り込めませんでした。'); }
     }
-    const importedSongs = songs; songs = beforeImport;
     if (new Set(importedSongs.map((s) => s.id)).size !== importedSongs.length) return showError($('#import-error'), 'CSV内のIDが重複しています。IDを一意にするか、追加・更新を選んでください。');
     if (!commitSongs(importedSongs)) return;
     $('#import-dialog').close();

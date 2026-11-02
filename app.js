@@ -227,7 +227,7 @@
     const key = sungKey(song);
     const relative = parallelKey(key);
     const original = song.key || '—';
-    const chordSearch = '<button class="search-menu-button" type="button" data-action="search-menu" data-id="' + escapeHtml(song.id) + '" title="Chordwiki・YouTube・YouTubeカラオケ・コード譜検索" aria-label="' + escapeHtml(song.title) + 'を検索">検索 ▾</button>';
+    const chordSearch = '<button class="search-menu-button" type="button" data-action="search-menu" data-id="' + escapeHtml(song.id) + '" title="Chordwiki・YouTube・YouTubeカラオケ・コード譜・歌詞検索" aria-label="' + escapeHtml(song.title) + 'を検索">検索 ▾</button>';
     const searchCell = '<td class="search-cell"><div class="row-actions search-actions">' + chordSearch + '</div></td>';
     const actionCell = personalView() ? '<td class="operations-cell"><button class="operation-menu-button" type="button" data-action="operation-menu" data-id="' + escapeHtml(song.id) + '" aria-haspopup="dialog" aria-controls="operation-dialog" aria-label="' + escapeHtml(song.artist + ' ' + song.title + 'の操作') + '" title="曲の操作"><span aria-hidden="true">⚙️</span></button></td>' : '';
     const transposeLabel = '(' + signed(song.transpose) + ')';
@@ -299,7 +299,7 @@
       $('#mobile-song-list').querySelectorAll('.song-card').forEach((card) => { card.open = openMobileSongs.has(card.dataset.songId); });
     } else {
       if ($('#mobile-song-list').hasChildNodes()) $('#mobile-song-list').replaceChildren();
-      $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th class="key-heading" scope="col"><span class="fit-heading">（移調）原曲 → 歌うキー / 平行調</span></th><th class="search-heading" scope="col" title="Chordwiki・YouTube・YouTubeカラオケ・コード譜検索"><span class="fit-heading">検索</span></th><th class="last-heading" scope="col"><span class="fit-heading">最後に歌った日</span></th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
+      $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th class="key-heading" scope="col"><span class="fit-heading">（移調）原曲 → 歌うキー / 平行調</span></th><th class="search-heading" scope="col" title="Chordwiki・YouTube・YouTubeカラオケ・コード譜・歌詞検索"><span class="fit-heading">検索</span></th><th class="last-heading" scope="col"><span class="fit-heading">最後に歌った日</span></th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
       fitTableColumns();
     }
     updateDataUi();
@@ -1372,7 +1372,8 @@
       { label:'Chordwiki', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' Chordwiki') },
       { label:'YouTube', href:'https://www.youtube.com/results?search_query=' + encodeURIComponent(query) },
       { label:'YouTube カラオケ', href:'https://www.youtube.com/results?search_query=' + encodeURIComponent(query + ' カラオケ') },
-      { label:'コード譜', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' コード譜') }
+      { label:'コード譜', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' コード譜') },
+      { label:'歌詞', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' 歌詞') }
     ];
   }
   function searchLinks(song) {

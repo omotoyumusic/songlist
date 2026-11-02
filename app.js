@@ -241,7 +241,7 @@
     const artistAddButton = personalView() ? '<button class="artist-add-button" type="button" data-action="add-artist" data-id="' + escapeHtml(song.id) + '" title="このアーティストの曲を追加" aria-label="' + escapeHtml(song.artist) + 'の曲を追加"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>' : '';
     return '<tr class="' + (song.visible ? '' : 'is-hidden-song') + '" data-song-id="' + escapeHtml(song.id) + '" data-kana-group="' + kanaGroup(song) + '">' +
       '<td><div class="artist-cell"><div class="artist-main"><div class="artist-info"><div class="cell-scroll"><span class="artist-name" title="' + escapeHtml(song.artist) + '">' + escapeHtml(song.artist) + hiddenMark + '</span></div>' + artistReading + '</div>' + artistAddButton + '</div></div></td>' +
-      '<td><div class="song-cell"><div class="cell-scroll"><span class="song-name" title="' + escapeHtml(song.title) + '">' + escapeHtml(song.title) + '</span></div>' + songReading + '</div></td>' +
+      '<td><div class="song-cell"><div class="cell-scroll"><button class="song-name song-title-search" type="button" data-action="search-menu" data-id="' + escapeHtml(song.id) + '" aria-haspopup="dialog" aria-controls="search-dialog" aria-label="' + escapeHtml(song.artist + ' ' + song.title + 'の検索先を選ぶ') + '">' + escapeHtml(song.title) + '</button></div>' + songReading + '</div></td>' +
       '<td class="key-column-cell"><div class="key-stack"><div class="key-cell">' + quickKey + '</div>' + (personalView() ? presetSwitcher(song) : '') + '</div></td>' +
       searchCell +
       '<td class="last-cell"><div class="cell-scroll date-scroll"><span class="date-cell ' + (song.lastSung ? 'date-recorded' : 'date-empty') + '">' + escapeHtml(formatDate(song.lastSung)) + '</span>' + (personalView() ? '<button class="history-link" type="button" data-action="history" data-id="' + escapeHtml(song.id) + '">履歴 ' + Practice.get(song).history.length + '回</button>' : '') + '</div></td>' +
@@ -610,7 +610,7 @@
     const action = button.dataset.action;
     const song = songs.find((item) => item.id === button.dataset.id);
     if (!song) return;
-    if (action === 'search-menu') return openSearchMenu(song);
+    if (action === 'search-menu') { event.preventDefault(); return openSearchMenu(song); }
     if (action === 'operation-menu') { if (canMutate()) openOperationMenu(song); return; }
     if (action === 'history') return openHistory(song.id);
     if (action === 'chord-search') {
@@ -1234,7 +1234,7 @@
     const personal = personalView();
     const button = (action, label, delta = '') => '<button type="button" class="button button-outline" data-action="' + action + '" data-id="' + escapeHtml(song.id) + '"' + (delta ? ' data-delta="' + delta + '"' : '') + '>' + label + '</button>';
     const fullKey = '<span class="key-chip">(' + signed(song.transpose) + ')</span> <span>' + escapeHtml(song.key || '未設定') + '</span> → <span class="key-chip">' + escapeHtml(key || '—') + '</span> / <span class="parallel-chip">' + escapeHtml(relative || '—') + '</span>';
-    return '<details class="song-card' + (!song.visible ? ' is-hidden-song' : '') + '" data-song-id="' + escapeHtml(song.id) + '" data-kana-group="' + kanaGroup(song) + '"><summary><span class="card-title">' + escapeHtml(song.title) + '</span><span class="card-artist">' + escapeHtml(song.artist) + (!song.visible ? '・非表示' : '') + '</span><span class="card-key">' + fullKey + '</span><span class="card-chevron" aria-hidden="true">⌄</span></summary><div class="card-details">' +
+    return '<details class="song-card' + (!song.visible ? ' is-hidden-song' : '') + '" data-song-id="' + escapeHtml(song.id) + '" data-kana-group="' + kanaGroup(song) + '"><summary><button class="card-title song-title-search" type="button" data-action="search-menu" data-id="' + escapeHtml(song.id) + '" aria-haspopup="dialog" aria-controls="search-dialog" aria-label="' + escapeHtml(song.artist + ' ' + song.title + 'の検索先を選ぶ') + '">' + escapeHtml(song.title) + '</button><span class="card-artist">' + escapeHtml(song.artist) + (!song.visible ? '・非表示' : '') + '</span><span class="card-key">' + fullKey + '</span><span class="card-chevron" aria-hidden="true">⌄</span></summary><div class="card-details">' +
       (personal ? presetSwitcher(song) + '<p class="card-reading">読み：' + escapeHtml(song.artistKana + ' / ' + song.songKana) + '</p><div class="card-transpose">' + button('transpose','− 半音下げる','-1') + button('transpose','＋ 半音上げる','1') + '</div>' : '') +
       '<p>最後に歌った日：' + escapeHtml(formatDate(song.lastSung)) + (personal ? ' ／ 記録 ' + Practice.get(song).history.length + '回' : '') + '</p>' +
       (personal ? '<p class="card-notes">備考：' + escapeHtml(song.notes || '未入力') + '</p>' : '') +

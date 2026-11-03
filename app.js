@@ -1399,7 +1399,7 @@
     $('#work-info-jasrac').textContent = 'J-WIDを検索しています…';
     if (!$('#work-info-dialog').open) $('#work-info-dialog').showModal();
     const appleUrl = new URL('https://itunes.apple.com/search');
-    appleUrl.search = new URLSearchParams({ term: song.artist + ' ' + song.title, country: 'jp', media: 'music', entity: 'song', limit: '30' }).toString();
+    appleUrl.search = new URLSearchParams({ term: song.artist + ' ' + song.title, country: 'jp', entity: 'song', limit: '30' }).toString();
     void fetch(appleUrl.toString()).then((response) => {
       if (!response.ok) throw new Error('Appleへの接続エラー');
       return response.json();
@@ -1407,7 +1407,7 @@
       if (currentWorkInfo !== state) return;
       const normalize = (text) => String(text || '').normalize('NFKC').toLocaleLowerCase('ja').replace(/[\s\p{P}\p{S}]/gu, '');
       const wanted = normalize(song.title);
-      const tracks = (Array.isArray(data.results) ? data.results : []).filter((track) => /^\d{4}/.test(track.releaseDate || '') && normalize(track.trackName).includes(wanted) && !/カラオケ|オルゴール|instrumental|off\s*vocal/i.test(track.trackName || '')).slice(0, 8);
+      const tracks = (Array.isArray(data.results) ? data.results : []).filter((track) => track.kind === 'song' && /^\d{4}/.test(track.releaseDate || '') && normalize(track.trackName).includes(wanted) && !/カラオケ|オルゴール|instrumental|off\s*vocal/i.test(track.trackName || '')).sort((a, b) => a.releaseDate.localeCompare(b.releaseDate)).slice(0, 8);
       $('#work-info-release').innerHTML = tracks.length ? '<div class="work-info-options">' + tracks.map((track) => '<div class="work-info-result"><strong>' + escapeHtml(track.releaseDate.slice(0, 4)) + '年</strong>　' + escapeHtml(track.trackName || '') + '<br><small>' + escapeHtml(track.artistName || '') + ' / ' + escapeHtml(track.collectionName || '') + '</small></div>').join('') + '</div>' : '一致する発売年を確認できませんでした。';
     }).catch(() => { if (currentWorkInfo === state) $('#work-info-release').textContent = 'Appleの配信情報を取得できませんでした。'; });
     if (!user || !supabase || sharedListMode) {

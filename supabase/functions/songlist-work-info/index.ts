@@ -72,6 +72,18 @@ Deno.serve(async (req) => {
     if (detailUrl.origin !== origin || !detailUrl.pathname.startsWith("/eJwid/")) return json(502, { error: "作品詳細の取得先を確認できませんでした。" });
     const details = await request(detailUrl.toString(), { headers: { Referer: `${root}main?trxID=A00401-3` } });
     const d = load(details);
+    const creatorTable = d("#tab-def .PC table.detail").first();
+    const creators: { lyricists: string[]; composers: string[]; arrangers: string[] } | null = creatorTable.length
+      ? { lyricists: [], composers: [], arrangers: [] } : null;
+    if (creators) creatorTable.find("tr").each((_i, row) => {
+      const cells = d(row).children("td");
+      if (cells.length < 3) return;
+      const name = cells.eq(1).text().replace(/\s+/g, " ").trim();
+      const role = cells.eq(2).text().replace(/\s+/g, "").trim();
+      const list = role === "作詞" ? creators.lyricists : role === "作曲" ? creators.composers : role === "編曲" || role === "公編" ? creators.arrangers : null;
+      const displayName = role === "公編" ? `${name}（公表時編曲）` : name;
+      if (list && name && !list.includes(displayName)) list.push(displayName);
+    });
     const tabLink = d('a[href="#tab-00-07"]').first();
     const tab = d("#tab-00-07").first();
     if (!tabLink.length || !tab.length) return json(502, { error: "配信欄を読み取れませんでした。公式サイトでご確認ください。" });
@@ -82,7 +94,7 @@ Deno.serve(async (req) => {
     else if (classes.includes("purple") || note.includes("JASRACが著作権を管理")) management = "管理";
     else if (classes.includes("red") || note.includes("管理しておりません")) management = "管理外";
     else if (classes.includes("gray") || note.includes("お問い合わせ")) management = "要確認";
-    return json(200, { work: { code: item.code, title: item.title, artist: item.artist, author: item.author, management, note } });
+    return json(200, { work: { code: item.code, title: item.title, artist: item.artist, author: item.author, management, note, creators } });
   } catch (_error) {
     return json(502, { error: "J-WIDに接続できませんでした。しばらく待ってからお試しください。" });
   }

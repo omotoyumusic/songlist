@@ -1673,7 +1673,7 @@
       const available = row && [...row[1]].some((letter) => kanaNavigation.targets.has(letter));
       button.setAttribute('aria-controls',mobileLayout.matches ? 'mobile-song-list' : 'song-list');
       button.setAttribute('aria-disabled',String(!available));
-      button.setAttribute('aria-label',(button.dataset.kanaRow === '他' ? '英数字・その他' : button.dataset.kanaRow + '行') + (available ? '：ドラッグして文字を選択' : '：該当する曲なし'));
+      button.setAttribute('aria-label',(button.dataset.kanaRow === '他' ? '英数字・その他' : button.dataset.kanaRow + '行') + (available ? '：上下にドラッグして文字を選択' : '：該当する曲なし'));
       button.tabIndex = available ? 0 : -1;
     });
     $('#mobile-song-list').classList.toggle('has-kana-index',kanaNavigation.enabled && mobileLayout.matches);
@@ -1730,6 +1730,8 @@
     window.clearTimeout(kanaNavigation.feedbackTimer);
     $('#kana-index-letter').textContent = group;
     $('#kana-index-caption').textContent = kanaNavigation.targets.has(group) ? kanaLabel(group) : '該当する曲なし';
+    const row = kanaRows.find(([, letters]) => letters.includes(group));
+    $('#kana-index-row').textContent = row ? [...row[1]].map((letter) => letter === group ? '【' + letter + '】' : letter).join(' ') : '';
     $('#kana-index-feedback').classList.remove('hidden');
     if (!kanaNavigation.dragging) kanaNavigation.feedbackTimer = window.setTimeout(() => $('#kana-index-feedback').classList.add('hidden'),650);
   }
@@ -1760,20 +1762,17 @@
     if (spoken) $('#kana-index-status').textContent = kanaLabel(group) + '、' + target.song.artist + '、' + target.song.title + 'へ移動しました。';
     scheduleKanaLayout();
   }
-  function moveKanaPointer(event) {
+  function moveKanaPointer(event, initial=false) {
     const nav = $('#kana-index');
-    const isRail = event.clientX >= nav.getBoundingClientRect().left;
-    const buttons = [...nav.querySelectorAll(isRail ? 'button[data-kana-row]' : 'button[data-kana]')];
-    const button = buttons.reduce((nearest, item) => {
-      const rect = item.getBoundingClientRect();
-      const dx = Math.max(rect.left - event.clientX, 0, event.clientX - rect.right);
-      const dy = Math.max(rect.top - event.clientY, 0, event.clientY - rect.bottom);
-      const distance = dx * dx + dy * dy;
-      return !nearest || distance < nearest.distance ? { item, distance } : nearest;
-    }, null)?.item;
+    const buttons = [...nav.querySelectorAll('button[data-kana-row]')];
+    const button = buttons.find((item) => event.clientY < item.getBoundingClientRect().bottom) || buttons.at(-1);
     if (!button) return;
-    const row = isRail && kanaRows.find(([initial]) => initial === button.dataset.kanaRow);
-    const group = isRail ? ([...(row?.[1] || '')].find((letter) => kanaNavigation.targets.has(letter)) || button.dataset.kanaRow) : button.dataset.kana;
+    const row = kanaRows.find(([key]) => key === button.dataset.kanaRow);
+    const letters = [...(row?.[1] || '')];
+    if (!letters.length) return;
+    const rect = button.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(0.999999, (event.clientY - rect.top) / rect.height));
+    const group = initial ? (letters.find((letter) => kanaNavigation.targets.has(letter)) || letters[0]) : letters[Math.floor(ratio * letters.length)];
     if (group === kanaNavigation.pointGroup) return;
     kanaNavigation.pointGroup = group;
     jumpKana(group);
@@ -1804,7 +1803,7 @@
       kanaNavigation.dragging=true; kanaNavigation.pointerId=event.pointerId;
       kanaNavigation.pointGroup=''; kanaNavigation.jumpedGroup='';
       nav.setPointerCapture(event.pointerId); nav.classList.add('is-dragging');
-      moveKanaPointer(event);
+      moveKanaPointer(event,true);
     });
     nav.addEventListener('pointermove',(event) => {
       if (!kanaNavigation.dragging || event.pointerId!==kanaNavigation.pointerId) return;

@@ -1387,7 +1387,33 @@
     ];
   }
   function searchLinks(song) {
-    return searchDestinations(song).map((item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(item.ariaLabel || song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>').join('') + '<button type="button" class="button button-outline" data-action="work-info" data-id="' + escapeHtml(song.id) + '">発売年・作品コード・管理状況</button>';
+    return searchDestinations(song).map((item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(item.ariaLabel || song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>').join('') + '<button type="button" class="button button-outline" data-action="work-info" data-id="' + escapeHtml(song.id) + '">楽曲情報</button>';
+  }
+  async function loadMusicBrainzCredits(song, state) {
+    const field = $('#work-info-creators');
+    try {
+      const clean = (s) => String(s || '').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
+      const quote = (s) => String(s).replace(/[\\"]/g, '\\$&');
+      const params = new URLSearchParams({ query: 'recording:"' + quote(song.title) + '" AND artist:"' + quote(song.artist) + '"', fmt: 'json', limit: '10' });
+      const search = await fetch('https://musicbrainz.org/ws/2/recording?' + params);
+      if (!search.ok) throw new Error();
+      const data = await search.json();
+      const match = (data.recordings || []).find((r) => clean(r.title) === clean(song.title) && (r['artist-credit'] || []).some((a) => clean(a.name || a.artist?.name) === clean(song.artist)));
+      if (!match) { if (currentWorkInfo === state) field.textContent = '一致する楽曲情報が見つかりませんでした。'; return; }
+      const detail = await fetch('https://musicbrainz.org/ws/2/recording/' + encodeURIComponent(match.id) + '?inc=artist-rels%2Bwork-rels%2Bwork-level-rels&fmt=json');
+      if (!detail.ok) throw new Error();
+      const recording = await detail.json();
+      if (currentWorkInfo !== state) return;
+      const credits = { lyricist: [], composer: [], arranger: [] };
+      const collect = (relations) => (relations || []).forEach((r) => {
+        const name = r['target-credit'] || r.artist?.name;
+        const role = r.type === 'lyricist' ? 'lyricist' : r.type === 'composer' ? 'composer' : /arranger/.test(r.type || '') ? 'arranger' : null;
+        if (role && name && !credits[role].includes(name)) credits[role].push(name);
+        if (r.work) collect(r.work.relations);
+      });
+      collect(recording.relations);
+      field.innerHTML = '<div class="work-info-result">' + [['作詞', credits.lyricist], ['作曲', credits.composer], ['編曲', credits.arranger]].map(([label, names]) => '<div>' + label + '：' + (names.length ? names.map(escapeHtml).join('、') : '情報なし') + '</div>').join('') + '</div>';
+    } catch (_) { if (currentWorkInfo === state) field.textContent = '作詞・作曲・編曲の情報を取得できませんでした。'; }
   }
   let currentWorkInfo = null;
   async function openWorkInfo(song) {
@@ -1395,7 +1421,8 @@
     const state = { artist: song.artist, title: song.title };
     currentWorkInfo = state;
     $('#work-info-song').textContent = song.artist + ' / ' + song.title;
-    $('#work-info-creators').textContent = 'J-WIDを検索しています…';
+    $('#work-info-creators').textContent = 'MusicBrainzを検索しています…';
+    void loadMusicBrainzCredits(song, state);
     $('#work-info-release').textContent = 'Appleの配信情報を検索しています…';
     $('#work-info-jasrac').textContent = 'J-WIDを検索しています…';
     if (!$('#work-info-dialog').open) $('#work-info-dialog').showModal();
@@ -1412,7 +1439,6 @@
       $('#work-info-release').innerHTML = tracks.length ? '<div class="work-info-options">' + tracks.map((track) => '<div class="work-info-result"><strong>' + escapeHtml(track.releaseDate.slice(0, 4)) + '年</strong>　' + escapeHtml(track.trackName || '') + '<br><small>' + escapeHtml(track.artistName || '') + ' / ' + escapeHtml(track.collectionName || '') + '</small></div>').join('') + '</div>' : '一致する発売年を確認できませんでした。';
     }).catch(() => { if (currentWorkInfo === state) $('#work-info-release').textContent = 'Appleの配信情報を取得できませんでした。'; });
     if (!user || !supabase || sharedListMode) {
-      $('#work-info-creators').textContent = '作詞・作曲・編曲の情報はログイン後のリストから確認できます。';
       $('#work-info-jasrac').textContent = 'J-WIDの情報はログイン後のリストから確認できます。';
       return;
     }
@@ -1422,27 +1448,22 @@
       if (error || data?.error) throw new Error(data?.error || 'J-WIDの情報を取得できませんでした。');
       const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
       if (!candidates.length) {
-        $('#work-info-creators').textContent = '該当する作品が見つかりませんでした。';
         return void ($('#work-info-jasrac').textContent = '該当する作品が見つかりませんでした。');
       }
       if (candidates.length === 1) return void loadWorkDetails(state, candidates[0].code);
-      $('#work-info-creators').textContent = '下の「作品コードと配信の管理状況」から作品を選んでください。';
       $('#work-info-jasrac').innerHTML = '<p>該当する作品を選んでください。</p><div class="work-info-options">' + candidates.map((item) => '<button class="button button-outline" type="button" data-work-code="' + escapeHtml(item.code) + '">' + escapeHtml(item.title) + ' / ' + escapeHtml(item.artist || item.author || '作者・歌手名なし') + '（' + escapeHtml(item.code) + '）</button>').join('') + '</div>' + (data.truncated ? '<p class="subtle">候補の一部を表示しています。</p>' : '');
-    } catch (error) { if (currentWorkInfo === state) { $('#work-info-creators').textContent = 'J-WIDの情報を取得できませんでした。'; $('#work-info-jasrac').textContent = error.message || 'J-WIDの情報を取得できませんでした。'; } }
+    } catch (error) { if (currentWorkInfo === state) $('#work-info-jasrac').textContent = error.message || 'J-WIDの情報を取得できませんでした。'; }
   }
   async function loadWorkDetails(state, code) {
     const request = state.detailRequest = Symbol();
-    $('#work-info-creators').textContent = '作品の情報を確認しています…';
     $('#work-info-jasrac').textContent = '作品の管理状況を確認しています…';
     try {
       const { data, error } = await supabase.functions.invoke('songlist-work-info', { body: { artist: state.artist, title: state.title, code } });
       if (currentWorkInfo !== state || state.detailRequest !== request) return;
       if (error || !data?.work) throw new Error(data?.error || '作品の管理状況を確認できませんでした。');
       const work = data.work;
-      const creators = work.creators;
-      $('#work-info-creators').innerHTML = creators ? '<div class="work-info-result">' + [['作詞', creators.lyricists], ['作曲', creators.composers], ['編曲', creators.arrangers]].map(([label, names]) => '<div>' + label + '：' + (Array.isArray(names) && names.length ? names.map(escapeHtml).join('、') : '掲載なし') + '</div>').join('') + '</div>' : '作詞・作曲・編曲の情報を取得できませんでした。';
       $('#work-info-jasrac').innerHTML = '<div class="work-info-result"><strong>' + escapeHtml(work.title) + '</strong><br>' + escapeHtml(work.artist || work.author || '') + '<br>作品コード：' + escapeHtml(work.code) + '<br>配信の管理状況：' + escapeHtml(work.management) + (work.note ? '<br><small>' + escapeHtml(work.note) + '</small>' : '') + '</div>';
-    } catch (error) { if (currentWorkInfo === state && state.detailRequest === request) { $('#work-info-creators').textContent = '作詞・作曲・編曲の情報を取得できませんでした。'; $('#work-info-jasrac').textContent = error.message || '作品の管理状況を確認できませんでした。'; } }
+    } catch (error) { if (currentWorkInfo === state && state.detailRequest === request) $('#work-info-jasrac').textContent = error.message || '作品の管理状況を確認できませんでした。'; }
   }
   function openSearchMenu(song) {
     $('#search-song-name').textContent = song.artist + ' / ' + song.title;

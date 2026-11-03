@@ -21,7 +21,7 @@ class FormDataStub { get(name) { return name === 'import-mode' ? 'merge' : null;
 const context = vm.createContext({ window, document: { querySelector: (selector) => elements[selector] || null }, FormData:FormDataStub, crypto: webcrypto, structuredClone, URLSearchParams, console, setTimeout, clearTimeout });
 vm.runInContext(read('songlist-core.js'), context);
 vm.runInContext(read('songlist-practice.js'), context);
-const source = read('app.js').replace('  start();\n})();', `  window.debugApi = { setShared: (value) => { sharedListMode = value; }, csvToSongs, parseCsv, csvCell, sortSongs, normalizeSong, processImport, mergeImportedSongs: typeof mergeImportedSongs === 'function' ? mergeImportedSongs : null, prepareImport: (existing,incoming) => { songs=existing; pendingImport=incoming; canMutate=()=>true; commitSongs=(next)=>{songs=next;return true;}; persistSongs=async()=>true; announce=()=>{}; }, getSongs:()=>songs };\n})();`);
+const source = read('app.js').replace('  start();\n})();', `  window.debugApi = { setShared: (value) => { sharedListMode = value; }, syncInferredReading, csvToSongs, parseCsv, csvCell, sortSongs, normalizeSong, processImport, mergeImportedSongs: typeof mergeImportedSongs === 'function' ? mergeImportedSongs : null, prepareImport: (existing,incoming) => { songs=existing; pendingImport=incoming; canMutate=()=>true; commitSongs=(next)=>{songs=next;return true;}; persistSongs=async()=>true; announce=()=>{}; }, getSongs:()=>songs };\n})();`);
 assert.notEqual(source, read('app.js'), 'Could not load app functions');
 vm.runInContext(source, context);
 const api = window.debugApi, practice = window.SonglistPractice, core = window.SonglistCore;
@@ -36,6 +36,13 @@ const sample = {
 const checks = [];
 function check(name, fn) { try { fn(); checks.push([name, true]); } catch (error) { checks.push([name, false, error.message]); } }
 
+check('Kana readings follow typing and preserve manual corrections', () => {
+  const name = {value:'あ'}, reading = {value:'',dataset:{}};
+  api.syncInferredReading(name,reading); assert.equal(reading.value,'あ');
+  name.value='あいみょん'; api.syncInferredReading(name,reading); assert.equal(reading.value,'あいみょん');
+  reading.value='あいみょん べつ'; name.value='あいみょんず'; api.syncInferredReading(name,reading);
+  assert.equal(reading.value,'あいみょん べつ');
+});
 check('CSV handles commas, quotes and multiline fields', () => {
   const rows = [['アーティスト名','曲名','備考'], ['歌手','曲A','歌詞,\n"サビ"']];
   assert.equal(api.csvToSongs(csv(rows))[0].notes, rows[1][2]);
@@ -56,6 +63,18 @@ check('Malformed practice history is rejected instead of silently dropping recor
   for (const extra of [{practice:{history:'broken'}},{practice:{history:[{id:'x',date:'invalid'}]}},{practice:{history:[{id:'x',date:'2026-10-20'},{id:'x',date:'2026-10-21'}]}}]) {
     assert.throws(() => api.csvToSongs(csv([headers,[sample.artist,sample.title,JSON.stringify(extra)]])), /追加データ/);
   }
+});
+check('Empty singing history cannot contradict a last sung date', () => {
+  const headers = ['アーティスト名','曲名','最後に歌った日','追加データ(JSON)'];
+  const empty = JSON.stringify({practice:{history:[]}});
+  assert.throws(() => api.csvToSongs(csv([headers,['歌手','曲','2026-10-20',empty]])), /歌唱履歴/);
+  assert.equal(api.csvToSongs(csv([headers,['歌手','曲','',empty]]))[0].lastSung,'');
+});
+check('Importing explicit empty history clears the derived last sung date', () => {
+  const input = api.csvToSongs(csv([['アーティスト名','曲名','追加データ(JSON)'],[sample.artist,sample.title,JSON.stringify({practice:{history:[]}})]]));
+  const updated = api.mergeImportedSongs([sample],input)[0];
+  assert.equal(updated.lastSung,'');
+  assert.equal(practice.get(updated).history.length,0);
 });
 check('Unterminated CSV quote is rejected', () => {
   assert.throws(() => api.csvToSongs('アーティスト名,曲名,備考\n歌手,曲A,"中断'), /CSV/);

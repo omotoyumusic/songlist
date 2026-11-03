@@ -69,6 +69,17 @@
     return /^[\u3041-\u3096\u3099\u309a\u30a1-\u30f6ー・\s　]+$/u.test(text) ? normalizeReading(text) : '';
   }
 
+  function syncInferredReading(nameInput, readingInput) {
+    const previous = readingInput.dataset.autoReading;
+    if (!readingInput.value || (previous !== undefined && readingInput.value === previous)) {
+      const inferred = inferReadingFromName(nameInput.value);
+      readingInput.value = inferred;
+      readingInput.dataset.autoReading = inferred;
+    } else {
+      delete readingInput.dataset.autoReading;
+    }
+  }
+
   function fillKeySelect(select, selected) {
     select.innerHTML = '<option value="">未設定</option>' + keys.map((key) => '<option value="' + key + '">' + key + '</option>').join('');
     const normalized = normalizeKey(selected);
@@ -536,6 +547,8 @@
     $('#song-id').value = editing ? song.id : '';
     $('#artist-reading').value = editing ? song.artistKana : defaults.artistKana || '';
     $('#song-reading').value = editing ? song.songKana : '';
+    delete $('#artist-reading').dataset.autoReading;
+    delete $('#song-reading').dataset.autoReading;
     $('#artist-name').value = editing ? song.artist : defaults.artist || '';
     $('#song-title').value = editing ? song.title : '';
     editorPractice = Practice.get(editing ? song : { id:'new', transpose:0, extra:{} });
@@ -576,7 +589,7 @@
     practice.presets.find((p) => p.id === practice.activePresetId).transpose = Number($('#transpose-value').value);
     const song = normalizeSong({
       id: id || crypto.randomUUID(),
-      artistKana, artist, songKana: songKana || (previous && title === previous.title ? previous.songKana : ''), title,
+      artistKana: artistKana || (previous && artist === previous.artist ? previous.artistKana : ''), artist, songKana: songKana || (previous && title === previous.title ? previous.songKana : ''), title,
       key: $('#song-key').value,
       transpose: $('#transpose-value').value,
       lastSung: previous?.lastSung || '',
@@ -696,7 +709,9 @@
     event.preventDefault();
     const name = $('#profile-display-name').value.trim();
     if (!name || !user || !supabase) return;
-    const result = await supabase.auth.updateUser({ data: { full_name: name } });
+    let result;
+    try { result = await supabase.auth.updateUser({ data: { full_name: name } }); }
+    catch (_) { return showError($('#profile-error'), '表示名を保存できませんでした。通信状態を確認して再度お試しください。'); }
     if (result.error) {
       showError($('#profile-error'), '表示名を保存できませんでした。時間をおいて再度お試しください。');
       return;
@@ -705,9 +720,11 @@
     updateListTitle();
     $('#profile-dialog').close();
     if (shareRecord) {
-      const { data, error } = await supabase.rpc('manage_my_song_share', { p_action: 'rename', p_display_name: name });
-      if (error) return announce('自分の表示名は保存しました。共有名は「共有設定」で更新してください。');
-      shareRecord = data;
+      try {
+        const { data, error } = await supabase.rpc('manage_my_song_share', { p_action: 'rename', p_display_name: name });
+        if (error) throw error;
+        shareRecord = data;
+      } catch (_) { return announce('自分の表示名は保存しました。共有名は「共有設定」で更新してください。'); }
     }
     announce('表示名を更新しました。');
   }
@@ -721,7 +738,9 @@
       showError($('#password-error'), '確認用パスワードが一致しません。');
       return;
     }
-    const result = await supabase.auth.updateUser({ password });
+    let result;
+    try { result = await supabase.auth.updateUser({ password }); }
+    catch (_) { return showError($('#password-error'), 'パスワードを変更できませんでした。通信状態を確認して再度お試しください。'); }
     if (result.error) {
       showError($('#password-error'), 'パスワードを変更できませんでした。時間をおいて再度お試しください。');
       return;
@@ -884,8 +903,8 @@
         lastSung: normalizedDate, notes: original ? cleanImportedCell(row[12]) : valueAt(row, 'notes', ''),
         visible: original ? true : valueAt(row, 'visible', 'true').toLowerCase() !== 'false', extra
       }, imported.length);
-      if (!original && rawExtra && Array.isArray(extra.practice?.history) && extra.practice.history.length) {
-        const latest = extra.practice.history.map((record) => record.date).sort().at(-1);
+      if (!original && rawExtra && Array.isArray(extra.practice?.history)) {
+        const latest = extra.practice.history.map((record) => record.date).sort().at(-1) || '';
         if (columns.lastSung < 0) importedSong.lastSung = latest;
         else if (importedSong.lastSung !== latest) {
           throw new Error('「' + artist + ' / ' + title + '」の最後に歌った日と歌唱履歴が一致しません。CSVの内容を確認してください。');
@@ -1020,8 +1039,8 @@
     $('#transpose-down').addEventListener('click', () => { $('#transpose-value').value = Number($('#transpose-value').value || 0) - 1; updateTransposeOutput(); });
     $('#transpose-up').addEventListener('click', () => { $('#transpose-value').value = Number($('#transpose-value').value || 0) + 1; updateTransposeOutput(); });
     $('#song-key').addEventListener('change', updatePreview);
-    $('#artist-name').addEventListener('input', () => { const reading = inferReadingFromName($('#artist-name').value); if (reading && !$('#artist-reading').value) $('#artist-reading').value = reading; });
-    $('#song-title').addEventListener('input', () => { const reading = inferReadingFromName($('#song-title').value); if (reading && !$('#song-reading').value) $('#song-reading').value = reading; });
+    $('#artist-name').addEventListener('input', () => syncInferredReading($('#artist-name'), $('#artist-reading')));
+    $('#song-title').addEventListener('input', () => syncInferredReading($('#song-title'), $('#song-reading')));
     $('#auth-button').addEventListener('click', () => { window.location.href = window.location.pathname; });
     $('#logout-button').addEventListener('click', signOut);
     $('#account-settings-button').addEventListener('click', () => {
@@ -1200,6 +1219,7 @@
     const song = songs.find((s) => Core.identity(s.artist) === Core.identity($('#artist-picker').value));
     if (!song) return;
     $('#artist-name').value = song.artist; $('#artist-reading').value = song.artistKana;
+    delete $('#artist-reading').dataset.autoReading;
     $('#artist-context').textContent = '「' + song.artist + '」の名前・読み仮名を入力しました。';
     $('#artist-context').classList.remove('hidden');
   }

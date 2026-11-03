@@ -1383,7 +1383,9 @@
       { label:'YouTube', href:'https://www.youtube.com/results?search_query=' + encodeURIComponent(query) },
       { label:'YouTube カラオケ', href:'https://www.youtube.com/results?search_query=' + encodeURIComponent(query + ' カラオケ') },
       { label:'コード譜', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' コード譜') },
-      { label:'歌詞', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' 歌詞') }
+      { label:'歌詞', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' 歌詞') },
+      { label:'作詞作曲検索', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' 作詞 作曲') },
+      { label:'Wikipedia検索', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' Wikipedia') }
     ];
   }
   function searchLinks(song) {

@@ -1383,12 +1383,11 @@
       { label:'YouTube', href:'https://www.youtube.com/results?search_query=' + encodeURIComponent(query) },
       { label:'YouTube カラオケ', href:'https://www.youtube.com/results?search_query=' + encodeURIComponent(query + ' カラオケ') },
       { label:'コード譜', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' コード譜') },
-      { label:'歌詞', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' 歌詞') },
-      { label:'JASRAC 公式サイト', href:'https://www.jasrac.or.jp/', ariaLabel:'JASRAC公式サイトを開く（新しいタブ）' }
+      { label:'歌詞', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' 歌詞') }
     ];
   }
   function searchLinks(song) {
-    return '<button type="button" class="button button-outline" data-action="work-info" data-id="' + escapeHtml(song.id) + '">発売年・作品コード・管理状況</button>' + searchDestinations(song).map((item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(item.ariaLabel || song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>').join('');
+    return searchDestinations(song).map((item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(item.ariaLabel || song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>').join('') + '<button type="button" class="button button-outline" data-action="work-info" data-id="' + escapeHtml(song.id) + '">発売年・作品コード・管理状況</button>';
   }
   let currentWorkInfo = null;
   async function openWorkInfo(song) {

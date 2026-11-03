@@ -1389,31 +1389,45 @@
   function searchLinks(song) {
     return searchDestinations(song).map((item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(item.ariaLabel || song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>').join('') + '<button type="button" class="button button-outline" data-action="work-info" data-id="' + escapeHtml(song.id) + '">楽曲情報</button>';
   }
-  async function loadMusicBrainzCredits(song, state) {
+  async function loadWikipediaCredits(song, state) {
     const field = $('#work-info-creators');
+    const clean = (s) => String(s || '').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
+    const plain = (s) => String(s || '').replace(/<ref\b[^>]*>[\s\S]*?<\/ref>|<ref\b[^>]*\/>/gi, '').replace(/\[\[(?:[^\]|]+\|)?([^\]]+)\]\]/g, '$1').replace(/'{2,}/g, '').replace(/<[^>]+>|\{\{[^{}]*\}\}/g, '').trim();
+    const api = async (parameters) => {
+      const params = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', origin: '*', ...parameters });
+      const response = await fetch('https://ja.wikipedia.org/w/api.php?' + params);
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      if (data.error) throw new Error();
+      return data.query;
+    };
     try {
-      const clean = (s) => String(s || '').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
-      const quote = (s) => String(s).replace(/[\\"]/g, '\\$&');
-      const params = new URLSearchParams({ query: 'recording:"' + quote(song.title) + '" AND artist:"' + quote(song.artist) + '"', fmt: 'json', limit: '10' });
-      const search = await fetch('https://musicbrainz.org/ws/2/recording?' + params);
-      if (!search.ok) throw new Error();
-      const data = await search.json();
-      const match = (data.recordings || []).find((r) => clean(r.title) === clean(song.title) && (r['artist-credit'] || []).some((a) => clean(a.name || a.artist?.name) === clean(song.artist)));
-      if (!match) { if (currentWorkInfo === state) field.textContent = '一致する楽曲情報が見つかりませんでした。'; return; }
-      const detail = await fetch('https://musicbrainz.org/ws/2/recording/' + encodeURIComponent(match.id) + '?inc=artist-rels%2Bwork-rels%2Bwork-level-rels&fmt=json');
-      if (!detail.ok) throw new Error();
-      const recording = await detail.json();
-      if (currentWorkInfo !== state) return;
-      const credits = { lyricist: [], composer: [], arranger: [] };
-      const collect = (relations) => (relations || []).forEach((r) => {
-        const name = r['target-credit'] || r.artist?.name;
-        const role = r.type === 'lyricist' ? 'lyricist' : r.type === 'composer' ? 'composer' : /arranger/.test(r.type || '') ? 'arranger' : null;
-        if (role && name && !credits[role].includes(name)) credits[role].push(name);
-        if (r.work) collect(r.work.relations);
+      const results = await api({ list: 'search', srsearch: song.title + ' ' + song.artist, srlimit: '8' });
+      const candidates = (results.search || []).filter((item) => clean(item.title.replace(/\s*[（(].*?[）)]\s*$/, '')) === clean(song.title));
+      if (!candidates.length) { if (currentWorkInfo === state) field.textContent = '一致するWikipediaの記事が見つかりませんでした。'; return; }
+      const pages = await api({ prop: 'revisions', pageids: candidates.map((x) => x.pageid).join('|'), rvprop: 'content', rvslots: 'main' });
+      const matching = (pages.pages || []).map((p) => ({ page: p, text: p.revisions?.[0]?.slots?.main?.content || '' })).filter(({ text }) => {
+        const artistLine = text.match(/^\|\s*(?:artist|アーティスト|歌手)\s*=\s*(.*)$/im);
+        return artistLine && clean(plain(artistLine[1])) === clean(song.artist);
       });
-      collect(recording.relations);
-      field.innerHTML = '<div class="work-info-result">' + [['作詞', credits.lyricist], ['作曲', credits.composer], ['編曲', credits.arranger]].map(([label, names]) => '<div>' + label + '：' + (names.length ? names.map(escapeHtml).join('、') : '情報なし') + '</div>').join('') + '</div>';
-    } catch (_) { if (currentWorkInfo === state) field.textContent = '作詞・作曲・編曲の情報を取得できませんでした。'; }
+      if (currentWorkInfo !== state) return;
+      if (matching.length !== 1) { field.textContent = '曲とアーティストが一致する記事を特定できませんでした。'; return; }
+      const { page, text } = matching[0];
+      const section = text.split(/\n==\s*(?:収録曲|曲目|収録内容)\s*==/)[1]?.split(/\n==[^=]/)[0] || '';
+      const lines = section.split('\n');
+      const trackIndex = lines.findIndex((line) => /^#(?![:*#])/.test(line) && clean(plain(line.replace(/^#+\s*/, '')).replace(/\s*[（(].*$/, '')) === clean(song.title));
+      const globalLines = lines.slice(0, Math.max(trackIndex, 0)).filter((line) => /全(?:曲|作詞|作曲|編曲)/.test(line));
+      const trackLines = trackIndex < 0 ? [] : lines.slice(trackIndex, lines.findIndex((line, i) => i > trackIndex && /^#(?![:*#])/.test(line)) < 0 ? lines.length : lines.findIndex((line, i) => i > trackIndex && /^#(?![:*#])/.test(line)));
+      const input = plain([...globalLines, ...trackLines].join('\n')).replace(/全曲/g, '');
+      const credits = { 作詞: [], 作曲: [], 編曲: [] };
+      const pattern = /((?:作詞|作曲|編曲)(?:\s*[・、／/]\s*(?:作詞|作曲|編曲))*)\s*[:：]\s*([^、;；/／\n]+(?:、(?!\s*(?:作詞|作曲|編曲))[^、;；/／\n]+)*)/g;
+      for (const match of input.matchAll(pattern)) {
+        const name = match[2].replace(/\s*\([^)]*\)\s*$/, '').trim();
+        if (!name || name.length > 80) continue;
+        for (const role of match[1].match(/作詞|作曲|編曲/g) || []) if (!credits[role].includes(name)) credits[role].push(name);
+      }
+      field.innerHTML = '<div class="work-info-result">' + Object.entries(credits).map(([role, names]) => '<div>' + role + '：' + (names.length ? names.map(escapeHtml).join('、') : '情報なし') + '</div>').join('') + '</div><p><a href="https://ja.wikipedia.org/?curid=' + encodeURIComponent(page.pageid) + '" target="_blank" rel="noopener noreferrer">出典：Wikipedia「' + escapeHtml(page.title) + '」 ↗</a>（<a href="https://creativecommons.org/licenses/by-sa/4.0/deed.ja" target="_blank" rel="noopener noreferrer">CC BY-SA</a>）</p>';
+    } catch (_) { if (currentWorkInfo === state) field.textContent = 'Wikipediaの情報を取得できませんでした。'; }
   }
   let currentWorkInfo = null;
   async function openWorkInfo(song) {
@@ -1421,8 +1435,8 @@
     const state = { artist: song.artist, title: song.title };
     currentWorkInfo = state;
     $('#work-info-song').textContent = song.artist + ' / ' + song.title;
-    $('#work-info-creators').textContent = 'MusicBrainzを検索しています…';
-    void loadMusicBrainzCredits(song, state);
+    $('#work-info-creators').textContent = 'Wikipediaを検索しています…';
+    void loadWikipediaCredits(song, state);
     $('#work-info-release').textContent = 'Appleの配信情報を検索しています…';
     $('#work-info-jasrac').textContent = 'J-WIDを検索しています…';
     if (!$('#work-info-dialog').open) $('#work-info-dialog').showModal();

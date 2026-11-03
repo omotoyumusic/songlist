@@ -611,6 +611,7 @@
     const song = songs.find((item) => item.id === button.dataset.id);
     if (!song) return;
     if (action === 'search-menu') { event.preventDefault(); return openSearchMenu(song); }
+    if (action === 'work-info') { event.preventDefault(); return openWorkInfo(song); }
     if (action === 'operation-menu') { if (canMutate()) openOperationMenu(song); return; }
     if (action === 'history') return openHistory(song.id);
     if (action === 'chord-search') {
@@ -1129,7 +1130,7 @@
     const previous = picker.value;
     picker.innerHTML = pendingDrafts.map((draft) => '<option value="' + escapeHtml(draft.draftId) + '">' + escapeHtml(new Date(draft.updatedAt).toLocaleString('ja-JP')) + '・' + draft.songs.length + '曲</option>').join('');
     if (pendingDrafts.some((d) => d.draftId === previous)) picker.value = previous;
-    document.querySelectorAll('#add-button,#empty-add,#import-button,#artist-manage-button,#save-song-button,[data-action]:not([data-action="chord-search"]):not([data-action="search-menu"])').forEach((el) => { el.disabled = !canMutate(false); });
+    document.querySelectorAll('#add-button,#empty-add,#import-button,#artist-manage-button,#save-song-button,[data-action]:not([data-action="chord-search"]):not([data-action="search-menu"]):not([data-action="work-info"])').forEach((el) => { el.disabled = !canMutate(false); });
     $('#export-button').disabled = loadState !== 'ready';
     $('#history-open-button').disabled = loadState !== 'ready';
     $('#history-save').disabled = !canMutate(false) || songs.length === 0;
@@ -1324,6 +1325,15 @@
     };
     $('#search-destinations').addEventListener('click', closeSearchMenu);
     $('#search-destinations').addEventListener('auxclick', closeSearchMenu);
+    $('#search-destinations').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-action="work-info"]');
+      const song = button && songs.find((item) => item.id === button.dataset.id);
+      if (song) openWorkInfo(song);
+    });
+    $('#work-info-jasrac').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-work-code]');
+      if (button && currentWorkInfo) void loadWorkDetails(currentWorkInfo, button.dataset.workCode);
+    });
     $('#reload-list').addEventListener('click', loadSongsForCurrentUser);
     $('#retry-save').addEventListener('click', persistSongs);
     $('#review-conflicts').addEventListener('click', showConflicts);
@@ -1378,7 +1388,52 @@
     ];
   }
   function searchLinks(song) {
-    return searchDestinations(song).map((item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(item.ariaLabel || song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>').join('');
+    return '<button type="button" class="button button-outline" data-action="work-info" data-id="' + escapeHtml(song.id) + '">発売年・作品コード・管理状況</button>' + searchDestinations(song).map((item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(item.ariaLabel || song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>').join('');
+  }
+  let currentWorkInfo = null;
+  async function openWorkInfo(song) {
+    if ($('#search-dialog').open) $('#search-dialog').close();
+    const state = { artist: song.artist, title: song.title };
+    currentWorkInfo = state;
+    $('#work-info-song').textContent = song.artist + ' / ' + song.title;
+    $('#work-info-release').textContent = 'Appleの配信情報を検索しています…';
+    $('#work-info-jasrac').textContent = 'J-WIDを検索しています…';
+    if (!$('#work-info-dialog').open) $('#work-info-dialog').showModal();
+    const appleUrl = new URL('https://itunes.apple.com/search');
+    appleUrl.search = new URLSearchParams({ term: song.artist + ' ' + song.title, country: 'jp', media: 'music', entity: 'song', limit: '30' }).toString();
+    void fetch(appleUrl.toString()).then((response) => {
+      if (!response.ok) throw new Error('Appleへの接続エラー');
+      return response.json();
+    }).then((data) => {
+      if (currentWorkInfo !== state) return;
+      const normalize = (text) => String(text || '').normalize('NFKC').toLocaleLowerCase('ja').replace(/[\s\p{P}\p{S}]/gu, '');
+      const wanted = normalize(song.title);
+      const tracks = (Array.isArray(data.results) ? data.results : []).filter((track) => /^\d{4}/.test(track.releaseDate || '') && normalize(track.trackName).includes(wanted) && !/カラオケ|オルゴール|instrumental|off\s*vocal/i.test(track.trackName || '')).slice(0, 8);
+      $('#work-info-release').innerHTML = tracks.length ? '<div class="work-info-options">' + tracks.map((track) => '<div class="work-info-result"><strong>' + escapeHtml(track.releaseDate.slice(0, 4)) + '年</strong>　' + escapeHtml(track.trackName || '') + '<br><small>' + escapeHtml(track.artistName || '') + ' / ' + escapeHtml(track.collectionName || '') + '</small></div>').join('') + '</div>' : '一致する発売年を確認できませんでした。';
+    }).catch(() => { if (currentWorkInfo === state) $('#work-info-release').textContent = 'Appleの配信情報を取得できませんでした。'; });
+    if (!user || !supabase || sharedListMode) {
+      $('#work-info-jasrac').textContent = 'J-WIDの情報はログイン後のリストから確認できます。';
+      return;
+    }
+    try {
+      const { data, error } = await supabase.functions.invoke('songlist-work-info', { body: { artist: state.artist, title: state.title } });
+      if (currentWorkInfo !== state) return;
+      if (error || data?.error) throw new Error(data?.error || 'J-WIDの情報を取得できませんでした。');
+      const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+      if (!candidates.length) return void ($('#work-info-jasrac').textContent = '該当する作品が見つかりませんでした。');
+      if (candidates.length === 1) return void loadWorkDetails(state, candidates[0].code);
+      $('#work-info-jasrac').innerHTML = '<p>該当する作品を選んでください。</p><div class="work-info-options">' + candidates.map((item) => '<button class="button button-outline" type="button" data-work-code="' + escapeHtml(item.code) + '">' + escapeHtml(item.title) + ' / ' + escapeHtml(item.artist || item.author || '作者・歌手名なし') + '（' + escapeHtml(item.code) + '）</button>').join('') + '</div>' + (data.truncated ? '<p class="subtle">候補の一部を表示しています。</p>' : '');
+    } catch (error) { if (currentWorkInfo === state) $('#work-info-jasrac').textContent = error.message || 'J-WIDの情報を取得できませんでした。'; }
+  }
+  async function loadWorkDetails(state, code) {
+    $('#work-info-jasrac').textContent = '作品の管理状況を確認しています…';
+    try {
+      const { data, error } = await supabase.functions.invoke('songlist-work-info', { body: { artist: state.artist, title: state.title, code } });
+      if (currentWorkInfo !== state) return;
+      if (error || !data?.work) throw new Error(data?.error || '作品の管理状況を確認できませんでした。');
+      const work = data.work;
+      $('#work-info-jasrac').innerHTML = '<div class="work-info-result"><strong>' + escapeHtml(work.title) + '</strong><br>' + escapeHtml(work.artist || work.author || '') + '<br>作品コード：' + escapeHtml(work.code) + '<br>配信の管理状況：' + escapeHtml(work.management) + (work.note ? '<br><small>' + escapeHtml(work.note) + '</small>' : '') + '</div>';
+    } catch (error) { if (currentWorkInfo === state) $('#work-info-jasrac').textContent = error.message || '作品の管理状況を確認できませんでした。'; }
   }
   function openSearchMenu(song) {
     $('#search-song-name').textContent = song.artist + ' / ' + song.title;
@@ -1577,6 +1632,7 @@
   }
 
   const kanaSections = [...'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん', '他'];
+  const kanaRows = [['あ','あいうえお'],['か','かきくけこ'],['さ','さしすせそ'],['た','たちつてと'],['な','なにぬねの'],['は','はひふへほ'],['ま','まみむめも'],['や','やゆよ'],['ら','らりるれろ'],['わ','わをん'],['他','他']];
   const smallKana = { 'ぁ':'あ', 'ぃ':'い', 'ぅ':'う', 'ぇ':'え', 'ぉ':'お', 'っ':'つ', 'ゃ':'や', 'ゅ':'ゆ', 'ょ':'よ', 'ゎ':'わ', 'ゕ':'か', 'ゖ':'け', 'ゐ':'い', 'ゑ':'え' };
   const kanaNavigation = { targets:new Map(), enabled:false, dragging:false, pointerId:null, pointGroup:'', jumpedGroup:'', suppressedUntil:0, frame:0, feedbackTimer:0 };
   function kanaGroup(song) {
@@ -1589,7 +1645,8 @@
   function kanaLabel(group) { return group === '他' ? '英数字・その他' : group; }
   function setKanaCurrent(group) {
     $('#kana-index').querySelectorAll('button').forEach((button) => {
-      if (button.dataset.kana === group) button.setAttribute('aria-current','location');
+      const row = kanaRows.find(([initial, letters]) => initial === button.dataset.kanaRow && letters.includes(group));
+      if (button.dataset.kana === group || row) button.setAttribute('aria-current','location');
       else button.removeAttribute('aria-current');
     });
   }
@@ -1605,11 +1662,19 @@
     kanaNavigation.enabled = loadState === 'ready' && list.length > 0 && alphabetical && !recoveryMode && Boolean(user || sharedListMode);
     const titleOrder = $('#sort-mode').value === 'title';
     nav.setAttribute('aria-label',(titleOrder ? '曲名' : 'アーティスト名') + 'の五十音インデックス');
-    nav.querySelectorAll('button').forEach((button) => {
+    nav.querySelectorAll('button[data-kana]').forEach((button) => {
       const available = kanaNavigation.targets.has(button.dataset.kana);
       button.setAttribute('aria-controls',mobileLayout.matches ? 'mobile-song-list' : 'song-list');
       button.setAttribute('aria-disabled',String(!available));
       button.setAttribute('aria-label',kanaLabel(button.dataset.kana) + (available ? 'へ移動' : '：該当する曲なし'));
+      button.tabIndex = available ? 0 : -1;
+    });
+    nav.querySelectorAll('button[data-kana-row]').forEach((button) => {
+      const row = kanaRows.find(([initial]) => initial === button.dataset.kanaRow);
+      const available = row && [...row[1]].some((letter) => kanaNavigation.targets.has(letter));
+      button.setAttribute('aria-controls',mobileLayout.matches ? 'mobile-song-list' : 'song-list');
+      button.setAttribute('aria-disabled',String(!available));
+      button.setAttribute('aria-label',(button.dataset.kanaRow === '他' ? '英数字・その他' : button.dataset.kanaRow + '行') + (available ? '：ドラッグして文字を選択' : '：該当する曲なし'));
       button.tabIndex = available ? 0 : -1;
     });
     $('#mobile-song-list').classList.toggle('has-kana-index',kanaNavigation.enabled && mobileLayout.matches);
@@ -1646,7 +1711,7 @@
     const visible = bottom - top >= 220 && !document.querySelector('dialog[open]');
     nav.classList.toggle('hidden',!visible);
     if (!visible) return;
-    const height = Math.min(440,bottom-top);
+    const height = Math.min(330,bottom-top);
     nav.style.top = (top + (bottom-top-height)/2) + 'px';
     nav.style.height = height + 'px';
     nav.style.left = mobile ? '' : (list.right + 8) + 'px';
@@ -1697,7 +1762,9 @@
     scheduleKanaLayout();
   }
   function moveKanaPointer(event) {
-    const buttons = [...$('#kana-index').querySelectorAll('button')];
+    const nav = $('#kana-index');
+    const isRail = event.clientX >= nav.getBoundingClientRect().left;
+    const buttons = [...nav.querySelectorAll(isRail ? 'button[data-kana-row]' : 'button[data-kana]')];
     const button = buttons.reduce((nearest, item) => {
       const rect = item.getBoundingClientRect();
       const dx = Math.max(rect.left - event.clientX, 0, event.clientX - rect.right);
@@ -1706,7 +1773,8 @@
       return !nearest || distance < nearest.distance ? { item, distance } : nearest;
     }, null)?.item;
     if (!button) return;
-    const group = button.dataset.kana;
+    const row = isRail && kanaRows.find(([initial]) => initial === button.dataset.kanaRow);
+    const group = isRail ? ([...(row?.[1] || '')].find((letter) => kanaNavigation.targets.has(letter)) || button.dataset.kanaRow) : button.dataset.kana;
     if (group === kanaNavigation.pointGroup) return;
     kanaNavigation.pointGroup = group;
     jumpKana(group);
@@ -1726,7 +1794,11 @@
   }
   function setupKanaIndex() {
     const nav=$('#kana-index');
-    nav.innerHTML=kanaSections.map((group) => '<button type="button" data-kana="'+group+'" aria-controls="mobile-song-list">'+group+'</button>').join('');
+    const expanded = kanaRows.map(([, letters]) => {
+      const characters = [...letters];
+      return characters.map((group) => '<button type="button" data-kana="'+group+'" aria-controls="mobile-song-list">'+group+'</button>').join('') + '<span aria-hidden="true"></span>'.repeat(5-characters.length);
+    }).join('');
+    nav.innerHTML='<div class="kana-index-letters">'+expanded+'</div>' + kanaRows.map(([group]) => '<button type="button" data-kana-row="'+group+'" aria-controls="mobile-song-list">'+group+'</button>').join('');
     nav.addEventListener('pointerdown',(event) => {
       if (!kanaNavigation.enabled || !event.isPrimary || event.button!==0) return;
       event.preventDefault();
@@ -1743,13 +1815,13 @@
     nav.addEventListener('pointercancel',() => finishKanaGesture(false));
     nav.addEventListener('lostpointercapture',() => finishKanaGesture(false));
     nav.addEventListener('click',(event) => {
-      const button=event.target.closest('button[data-kana]');
+      const button=event.target.closest('button[data-kana],button[data-kana-row]');
       if (!button || !kanaNavigation.enabled || (event.detail!==0 && Date.now()<kanaNavigation.suppressedUntil) || button.getAttribute('aria-disabled')==='true') return;
-      jumpKana(button.dataset.kana,true);
+      jumpKana(button.dataset.kana || button.dataset.kanaRow,true);
     });
     nav.addEventListener('keydown',(event) => {
       if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
-      const buttons=[...nav.querySelectorAll('button[aria-disabled="false"]')];
+      const buttons=[...nav.querySelectorAll('button[data-kana][aria-disabled="false"]')];
       if (!buttons.length) return;
       event.preventDefault();
       const current=buttons.indexOf(document.activeElement);

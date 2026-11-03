@@ -21,7 +21,7 @@ class FormDataStub { get(name) { return name === 'import-mode' ? 'merge' : null;
 const context = vm.createContext({ window, document: { querySelector: (selector) => elements[selector] || null }, FormData:FormDataStub, crypto: webcrypto, structuredClone, URLSearchParams, console, setTimeout, clearTimeout });
 vm.runInContext(read('songlist-core.js'), context);
 vm.runInContext(read('songlist-practice.js'), context);
-const source = read('app.js').replace('  start();\n})();', `  window.debugApi = { csvToSongs, parseCsv, csvCell, sortSongs, normalizeSong, processImport, mergeImportedSongs: typeof mergeImportedSongs === 'function' ? mergeImportedSongs : null, prepareImport: (existing,incoming) => { songs=existing; pendingImport=incoming; canMutate=()=>true; commitSongs=(next)=>{songs=next;return true;}; persistSongs=async()=>true; announce=()=>{}; }, getSongs:()=>songs };\n})();`);
+const source = read('app.js').replace('  start();\n})();', `  window.debugApi = { setShared: (value) => { sharedListMode = value; }, csvToSongs, parseCsv, csvCell, sortSongs, normalizeSong, processImport, mergeImportedSongs: typeof mergeImportedSongs === 'function' ? mergeImportedSongs : null, prepareImport: (existing,incoming) => { songs=existing; pendingImport=incoming; canMutate=()=>true; commitSongs=(next)=>{songs=next;return true;}; persistSongs=async()=>true; announce=()=>{}; }, getSongs:()=>songs };\n})();`);
 assert.notEqual(source, read('app.js'), 'Could not load app functions');
 vm.runInContext(source, context);
 const api = window.debugApi, practice = window.SonglistPractice, core = window.SonglistCore;
@@ -136,6 +136,19 @@ check('Count sort uses saved history and breaks ties by reading', () => {
   const less={...sample,id:'other',artist:'別',artistKana:'あ',title:'別曲'};
   const sorted=api.sortSongs([less,more],'count');
   assert.equal(sorted[0].id,sample.id);
+});
+
+
+check('Shared count sort uses public counts and keeps artist order for ties', () => {
+  api.setShared(true);
+  try {
+    const songs = [
+      api.normalizeSong({id:'a',artist:'A',title:'A',artistSortIndex:0,singingCount:1},0),
+      api.normalizeSong({id:'b',artist:'B',title:'B',artistSortIndex:1,singingCount:3},1),
+      api.normalizeSong({id:'c',artist:'C',title:'C',artistSortIndex:2,singingCount:3},2)
+    ];
+    assert.deepEqual(plain(api.sortSongs(songs,'count').map(song => song.id)), ['b','c','a']);
+  } finally { api.setShared(false); }
 });
 
 for (const [name, passed, error] of checks) console.log(`${passed ? 'PASS' : 'FAIL'} ${name}${error ? ': '+error : ''}`);

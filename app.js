@@ -180,7 +180,7 @@
   }
 
   function sortSongs(list, mode = $('#sort-mode').value) {
-    const counts = mode === 'count' ? new Map(list.map((song) => [song.id, Practice.get(song).history.length])) : null;
+    const counts = mode === 'count' ? new Map(list.map((song) => [song.id, sharedListMode ? (song.singingCount ?? 0) : Practice.get(song).history.length])) : null;
     return list.sort((left, right) => {
       if (counts) {
         const difference = counts.get(right.id) - counts.get(left.id);
@@ -242,7 +242,7 @@
       '<td><div class="song-cell"><div class="cell-scroll"><button class="song-name song-title-search" type="button" data-action="search-menu" data-id="' + escapeHtml(song.id) + '" aria-haspopup="dialog" aria-controls="search-dialog" aria-label="' + escapeHtml(song.artist + ' ' + song.title + 'の検索先を選ぶ') + '">' + escapeHtml(song.title) + '</button></div>' + songReading + '</div></td>' +
       '<td class="key-column-cell"><div class="key-stack"><div class="key-cell">' + quickKey + '</div>' + (personalView() ? presetSwitcher(song) : '') + '</div></td>' +
       searchCell +
-      '<td class="last-cell"><div class="cell-scroll date-scroll"><span class="date-cell ' + (song.lastSung ? 'date-recorded' : 'date-empty') + '">' + escapeHtml(formatDate(song.lastSung)) + '</span>' + (personalView() ? '<button class="history-link" type="button" data-action="history" data-id="' + escapeHtml(song.id) + '">履歴 ' + Practice.get(song).history.length + '回</button>' : '') + '</div></td>' +
+      '<td class="last-cell"><div class="cell-scroll date-scroll"><span class="date-cell ' + (song.lastSung ? 'date-recorded' : 'date-empty') + '">' + escapeHtml(formatDate(song.lastSung)) + '</span>' + (personalView() ? '<button class="history-link" type="button" data-action="history" data-id="' + escapeHtml(song.id) + '">履歴 ' + Practice.get(song).history.length + '回</button>' : (Number.isInteger(song.singingCount) ? '<span class="history-link">記録 ' + song.singingCount + '回</span>' : '')) + '</div></td>' +
       notesCell + actionCell + '</tr>';
   }
 
@@ -306,9 +306,6 @@
 
   function updateAccessUi() {
     const canShowApp = Boolean(user || sharedListMode);
-    $('#sort-count-option').hidden = !personalView();
-    $('#sort-count-option').disabled = !personalView();
-    if (!personalView() && $('#sort-mode').value === 'count') $('#sort-mode').value = 'artist';
     if (!user) document.querySelectorAll('dialog[open]').forEach((d) => d.close());
     $('#auth-gate').classList.toggle('hidden', canShowApp || recoveryMode);
     $('#recovery-gate').classList.toggle('hidden', !recoveryMode);
@@ -471,6 +468,7 @@
       key: String(song.key || ''),
       transpose: Math.max(-24, Math.min(24, Number(song.transpose || 0) || 0)),
       lastSung: String(song.lastSung || ''),
+      ...(Number.isInteger(song.singingCount) && song.singingCount >= 0 ? { singingCount: song.singingCount } : {}),
       notes: String(song.notes || ''),
       visible: song.visible !== false,
       extra: song.extra && typeof song.extra === 'object' ? song.extra : {}
@@ -1007,7 +1005,7 @@
     const params = new URLSearchParams(window.location.search);
     sharedListMode = Boolean(params.get('list'));
     if (sharedListMode) updateAccessUi();
-    if (['title','recent'].includes(params.get('sort')) || (!sharedListMode && params.get('sort') === 'count')) $('#sort-mode').value = params.get('sort');
+    if (['title','recent','count'].includes(params.get('sort'))) $('#sort-mode').value = params.get('sort');
     $('#add-button').addEventListener('click', () => openSongDialog(null));
     setupUpgradeEvents();
     setupPracticeEvents();
@@ -1235,13 +1233,13 @@
     const fullKey = '<span class="key-chip">(' + signed(song.transpose) + ')</span> <span>' + escapeHtml(song.key || '未設定') + '</span> → <span class="key-chip">' + escapeHtml(key || '—') + '</span> / <span class="parallel-chip">' + escapeHtml(relative || '—') + '</span>';
     return '<details class="song-card' + (!song.visible ? ' is-hidden-song' : '') + '" data-song-id="' + escapeHtml(song.id) + '" data-kana-group="' + kanaGroup(song) + '"><summary><button class="card-title song-title-search" type="button" data-action="search-menu" data-id="' + escapeHtml(song.id) + '" aria-haspopup="dialog" aria-controls="search-dialog" aria-label="' + escapeHtml(song.artist + ' ' + song.title + 'の検索先を選ぶ') + '">' + escapeHtml(song.title) + '</button><span class="card-artist">' + escapeHtml(song.artist) + (!song.visible ? '・非表示' : '') + '</span><span class="card-key">' + fullKey + '</span><span class="card-chevron" aria-hidden="true">⌄</span></summary><div class="card-details">' +
       (personal ? presetSwitcher(song) + '<p class="card-reading">読み：' + escapeHtml(song.artistKana + ' / ' + song.songKana) + '</p><div class="card-transpose">' + button('transpose','− 半音下げる','-1') + button('transpose','＋ 半音上げる','1') + '</div>' : '') +
-      '<p>最後に歌った日：' + escapeHtml(formatDate(song.lastSung)) + (personal ? ' ／ 記録 ' + Practice.get(song).history.length + '回' : '') + '</p>' +
+      '<p>最後に歌った日：' + escapeHtml(formatDate(song.lastSung)) + (personal ? ' ／ 記録 ' + Practice.get(song).history.length + '回' : (Number.isInteger(song.singingCount) ? ' ／ 記録 ' + song.singingCount + '回' : '')) + '</p>' +
       (personal ? '<p class="card-notes">備考：' + escapeHtml(song.notes || '未入力') + '</p>' : '') +
       '<div class="card-search-actions">' + searchLinks(song) + '</div><div class="card-actions">' + (personal ? button('sung','今日歌った') + button('history','歌唱履歴') + button('edit','編集') + button('add-artist','同じ歌手の曲を追加') + button('toggle-visible',song.visible ? '閲覧用から非表示' : '閲覧用に表示') + button('delete','削除') : '') + '</div></div></details>';
   }
   function updateShareDialog() {
     $('#share-state').textContent = shareRecord?.enabled ? '共有中' : '共有停止中';
-    $('#share-description').textContent = '「表示する」が有効な ' + songs.filter((s) => s.visible).length + ' 曲と表示名を共有します。備考・非表示曲は共有しません。リンクを知る人はログインせずに閲覧・検索できます。';
+    $('#share-description').textContent = '「表示する」が有効な ' + songs.filter((s) => s.visible).length + ' 曲・表示名・歌唱回数を共有します。歌唱履歴の詳細・備考・非表示曲は共有しません。リンクを知る人はログインせずに閲覧・検索できます。';
     $('#share-enable').textContent = shareRecord?.enabled ? '表示名を保存してURLをコピー' : '共有を開始してURLをコピー';
     $('#share-stop').disabled = !shareRecord?.enabled;
     $('#share-rotate').disabled = !shareRecord;
@@ -1250,7 +1248,7 @@
   function viewerUrl(id) {
     const url = new URL(window.location.pathname, window.location.origin);
     const sort = $('#sort-mode').value;
-    url.searchParams.set('list', id); url.searchParams.set('sort', sort === 'count' ? 'artist' : sort); return url.toString();
+    url.searchParams.set('list', id); url.searchParams.set('sort', sort); return url.toString();
   }
   async function manageShare(action) {
     if (!personalView() || loadState !== 'ready' || dirty || saving) return;

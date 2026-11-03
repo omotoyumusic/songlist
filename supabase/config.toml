@@ -3,3 +3,6 @@ verify_jwt = true
 
 [functions.delete-songlist-account]
 verify_jwt = true
+
+[functions.songlist-work-info]
+verify_jwt = true

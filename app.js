@@ -203,12 +203,10 @@
     const artistFilter = $('#artist-filter').value;
     const list = songs.filter((song) => {
       if (artistFilter && song.artist !== artistFilter) return false;
-      if (personalView()) {
         const practiceFilter = $('#practice-filter').value;
         if (practiceFilter === 'never' && song.lastSung) return false;
         if (practiceFilter === 'recent' && (!song.lastSung || song.lastSung < dateBefore(30))) return false;
         if (practiceFilter === 'older' && song.lastSung && song.lastSung >= dateBefore(90)) return false;
-      }
       if (!song.visible && !showHidden) return false;
       if (!terms.length) return true;
       const searchable = [song.artist, song.artistKana, song.title, song.songKana, song.key, sungKey(song)];
@@ -267,7 +265,7 @@
     const artistCount = new Set(countScope.map((song) => song.artist)).size;
     $('#artist-count').textContent = artistCount.toLocaleString('ja-JP');
     $('#song-count').textContent = countScope.length.toLocaleString('ja-JP');
-    const isFiltered = Boolean($('#search-input').value.trim() || $('#artist-filter').value || (personalView() && $('#practice-filter').value));
+    const isFiltered = Boolean($('#search-input').value.trim() || $('#artist-filter').value || $('#practice-filter').value);
     $('#search-clear').classList.toggle('hidden', !isFiltered);
     $('#result-count').textContent = isFiltered ? '検索結果 ' + list.length.toLocaleString('ja-JP') + ' 曲' : '全 ' + list.length.toLocaleString('ja-JP') + ' 曲';
     $('.sort-note').innerHTML = '<span class="sort-symbol">↕</span> ' + ({ artist: 'アーティスト五十音順', title: '曲名五十音順', recent: '最後に歌った日順', count: '歌唱回数が多い順' }[$('#sort-mode').value] || 'アーティスト五十音順');
@@ -1389,10 +1387,18 @@
     ];
   }
   function searchLinks(song) {
-    return searchDestinations(song).map((item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(item.ariaLabel || song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>').join('') + '<button type="button" class="button button-outline" data-action="work-info" data-id="' + escapeHtml(song.id) + '">楽曲情報</button>';
+    const items = searchDestinations(song);
+    const link = (item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(item.ariaLabel || song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>';
+    const group = (name, labels) => '<section class="search-group"><h3>' + name + '</h3><div class="search-group-links">' + items.filter((item) => labels.includes(item.label)).map(link).join('') + '</div></section>';
+    return group('動画', ['YouTube', 'YouTube カラオケ']) + group('歌詞・コード', ['Chordwiki', 'コード譜', '歌詞']) + group('楽曲情報', ['作詞作曲検索', 'Wikipedia検索']) + '<button type="button" class="button button-outline" data-action="work-info" data-id="' + escapeHtml(song.id) + '">楽曲情報</button>';
   }
   async function loadWikipediaCredits(song, state) {
     const field = $('#work-info-creators');
+    const fallback = (message, candidates = []) => {
+      const searchUrl = 'https://www.google.com/search?q=' + encodeURIComponent(song.artist + ' ' + song.title + ' 作詞 作曲');
+      const links = candidates.slice(0, 5).map((item) => '<li><a href="https://ja.wikipedia.org/?curid=' + encodeURIComponent(item.pageid) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(item.title) + ' ↗</a></li>').join('');
+      field.innerHTML = '<p>' + escapeHtml(message) + '</p>' + (links ? '<p>記事の候補：</p><ul>' + links + '</ul>' : '') + '<p><a href="' + escapeHtml(searchUrl) + '" target="_blank" rel="noopener noreferrer">作詞・作曲をGoogleで検索 ↗</a></p>';
+    };
     const clean = (s) => String(s || '').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
     const plain = (s) => String(s || '').replace(/<ref\b[^>]*>[\s\S]*?<\/ref>|<ref\b[^>]*\/>/gi, '').replace(/\[\[(?:[^\]|]+\|)?([^\]]+)\]\]/g, '$1').replace(/'{2,}/g, '').replace(/<[^>]+>|\{\{[^{}]*\}\}/g, '').trim();
     const api = async (parameters) => {
@@ -1405,16 +1411,20 @@
     };
     try {
       const results = await api({ list: 'search', srsearch: song.title + ' ' + song.artist, srlimit: '8' });
-      const candidates = (results.search || []).filter((item) => clean(item.title.replace(/\s*[（(].*?[）)]\s*$/, '')) === clean(song.title));
-      if (!candidates.length) { if (currentWorkInfo === state) field.textContent = '一致するWikipediaの記事が見つかりませんでした。'; return; }
+      const candidates = results.search || [];
+      if (!candidates.length) { if (currentWorkInfo === state) fallback('一致するWikipediaの記事が見つかりませんでした。'); return; }
       const pages = await api({ prop: 'revisions', pageids: candidates.map((x) => x.pageid).join('|'), rvprop: 'content', rvslots: 'main' });
-      const matching = (pages.pages || []).map((p) => ({ page: p, text: p.revisions?.[0]?.slots?.main?.content || '' })).filter(({ text }) => {
+      const matching = (pages.pages || []).map((p) => ({ page: p, text: p.revisions?.[0]?.slots?.main?.content || '' })).filter(({ page, text }) => {
         const artistLine = text.match(/^\|\s*(?:artist|アーティスト|歌手)\s*=\s*(.*)$/im);
-        return artistLine && clean(plain(artistLine[1])) === clean(song.artist);
+        const titleMatch = clean(page.title.replace(/\s*[（(].*?[）)]\s*$/, '')) === clean(song.title);
+        const trackMatch = text.split('\n').some((line) => /^#(?![:*#])/.test(line) && clean(plain(line.replace(/^#+\s*/, '')).replace(/\s*[（(].*$/, '')) === clean(song.title));
+        return artistLine && clean(plain(artistLine[1])) === clean(song.artist) && (titleMatch || trackMatch);
       });
       if (currentWorkInfo !== state) return;
-      if (matching.length !== 1) { field.textContent = '曲とアーティストが一致する記事を特定できませんでした。'; return; }
-      const { page, text } = matching[0];
+      const directMatches = matching.filter(({ page }) => clean(page.title.replace(/\s*[（(].*?[）)]\s*$/, '')) === clean(song.title));
+      const selected = directMatches.length === 1 ? directMatches[0] : matching.length === 1 ? matching[0] : null;
+      if (!selected) { fallback('曲とアーティストが一致する記事を特定できませんでした。', candidates); return; }
+      const { page, text } = selected;
       const section = text.split(/\n==\s*(?:収録曲|曲目|収録内容)\s*==/)[1]?.split(/\n==[^=]/)[0] || '';
       const lines = section.split('\n');
       const trackIndex = lines.findIndex((line) => /^#(?![:*#])/.test(line) && clean(plain(line.replace(/^#+\s*/, '')).replace(/\s*[（(].*$/, '')) === clean(song.title));
@@ -1428,8 +1438,9 @@
         if (!name || name.length > 80) continue;
         for (const role of match[1].match(/作詞|作曲|編曲/g) || []) if (!credits[role].includes(name)) credits[role].push(name);
       }
-      field.innerHTML = '<div class="work-info-result">' + Object.entries(credits).map(([role, names]) => '<div>' + role + '：' + (names.length ? names.map(escapeHtml).join('、') : '情報なし') + '</div>').join('') + '</div><p><a href="https://ja.wikipedia.org/?curid=' + encodeURIComponent(page.pageid) + '" target="_blank" rel="noopener noreferrer">出典：Wikipedia「' + escapeHtml(page.title) + '」 ↗</a>（<a href="https://creativecommons.org/licenses/by-sa/4.0/deed.ja" target="_blank" rel="noopener noreferrer">CC BY-SA</a>）</p>';
-    } catch (_) { if (currentWorkInfo === state) field.textContent = 'Wikipediaの情報を取得できませんでした。'; }
+      const searchUrl = 'https://www.google.com/search?q=' + encodeURIComponent(song.artist + ' ' + song.title + ' 作詞 作曲');
+      field.innerHTML = '<div class="work-info-result">' + Object.entries(credits).map(([role, names]) => '<div>' + role + '：' + (names.length ? names.map(escapeHtml).join('、') : '情報なし') + '</div>').join('') + '</div><p><a href="https://ja.wikipedia.org/?curid=' + encodeURIComponent(page.pageid) + '" target="_blank" rel="noopener noreferrer">出典：Wikipedia「' + escapeHtml(page.title) + '」 ↗</a>（<a href="https://creativecommons.org/licenses/by-sa/4.0/deed.ja" target="_blank" rel="noopener noreferrer">CC BY-SA</a>）</p>' + (Object.values(credits).some((names) => !names.length) ? '<p><a href="' + escapeHtml(searchUrl) + '" target="_blank" rel="noopener noreferrer">作詞・作曲をGoogleで検索 ↗</a></p>' : '');
+    } catch (_) { if (currentWorkInfo === state) fallback('Wikipediaの情報を取得できませんでした。'); }
   }
   let currentWorkInfo = null;
   async function openWorkInfo(song) {
@@ -1778,7 +1789,7 @@
     $('#kana-index-letter').textContent = group;
     $('#kana-index-caption').textContent = kanaNavigation.targets.has(group) ? kanaLabel(group) : '該当する曲なし';
     const row = kanaRows.find(([, letters]) => letters.includes(group));
-    $('#kana-index-row').textContent = row ? [...row[1]].map((letter) => letter === group ? '【' + letter + '】' : letter).join(' ') : '';
+    $('#kana-index-row').textContent = row ? [...row[1]].map((letter) => letter === group ? '【' + letter + '】' : '　' + letter + '　').join('\n') : '';
     $('#kana-index-feedback').classList.remove('hidden');
     if (!kanaNavigation.dragging) kanaNavigation.feedbackTimer = window.setTimeout(() => $('#kana-index-feedback').classList.add('hidden'),650);
   }
@@ -1811,15 +1822,23 @@
   }
   function moveKanaPointer(event, initial=false) {
     const nav = $('#kana-index');
+    if (!initial) {
+      const index = Math.max(0, Math.min(kanaSections.length - 1, kanaNavigation.anchorIndex + Math.round((event.clientY - kanaNavigation.anchorY) / 12)));
+      const group = kanaSections[index];
+      if (group === kanaNavigation.pointGroup) return;
+      kanaNavigation.pointGroup = group;
+      jumpKana(group);
+      return;
+    }
     const buttons = [...nav.querySelectorAll('button[data-kana-row]')];
     const button = buttons.find((item) => event.clientY < item.getBoundingClientRect().bottom) || buttons.at(-1);
     if (!button) return;
     const row = kanaRows.find(([key]) => key === button.dataset.kanaRow);
     const letters = [...(row?.[1] || '')];
     if (!letters.length) return;
-    const rect = button.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(0.999999, (event.clientY - rect.top) / rect.height));
-    const group = initial ? (letters.find((letter) => kanaNavigation.targets.has(letter)) || letters[0]) : letters[Math.floor(ratio * letters.length)];
+    const group = letters.find((letter) => kanaNavigation.targets.has(letter)) || letters[0];
+    kanaNavigation.anchorY = event.clientY;
+    kanaNavigation.anchorIndex = kanaSections.indexOf(group);
     if (group === kanaNavigation.pointGroup) return;
     kanaNavigation.pointGroup = group;
     jumpKana(group);

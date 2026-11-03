@@ -329,6 +329,10 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .search-menu-button { flex: 1 0 auto; padding-inline: 3px; font-size: 10px; }
 .search-destinations { display: grid; gap: 12px; margin-top: 24px; }
 .search-destinations .button { min-height: 48px; justify-content: center; }
+.search-group { width: 100%; }
+.search-group h3 { margin: 8px 0; color: #52755d; font-size: 12px; }
+.search-group-links { display: grid; gap: 8px; }
+.card-search-actions .search-group-links { display: flex; flex-wrap: wrap; }
 .work-info-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid #e3eee6; }
 .work-info-section h3 { margin: 0 0 10px; color: #244b32; font-size: 14px; }
 .work-info-section h3 small { display: block; color: #718579; font-size: 11px; font-weight: 400; }
@@ -398,7 +402,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .kana-index-feedback { position: fixed; z-index: 9; top: 50%; left: 50%; transform: translate(-50%,-50%); display: grid; place-items: center; gap: 8px; min-width: 122px; min-height: 122px; padding: 18px; border: 1px solid #c7dece; border-radius: 24px; color: #22623b; background: #f4fbf6f5; box-shadow: 0 8px 35px #17392626; pointer-events: none; }
 .kana-index-feedback strong { font-size: 54px; line-height: 1; }
 .kana-index-feedback span { color: #52755d; font-size: 12px; }
-.kana-index-feedback small { color: #52755d; font-size: 11px; white-space: nowrap; }
+.kana-index-feedback small { color: #52755d; font-size: 12px; white-space: pre-line; text-align: center; line-height: 1.65; }
 @media (min-width: 701px) {
   .table-wrap.has-kana-index { width: calc(100% - 44px); }
 }

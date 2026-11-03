@@ -16,7 +16,7 @@
   <script src="config.js"></script>
   <script defer src="songlist-core.js?v=20261017-kana-index-1"></script>
   <script defer src="songlist-practice.js?v=20261024-history-time-1"></script>
-  <script defer src="app.js?v=20261103-release-year-iphone-1"></script>
+  <script defer src="app.js?v=20261103-creators-1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -151,7 +151,7 @@
   </dialog>
 
   <dialog id="search-dialog" class="modal search-modal" aria-labelledby="search-dialog-title"><div class="dialog-content"><div class="modal-heading"><h2 id="search-dialog-title">検索先を選ぶ</h2><button class="icon-button" type="button" data-close="search-dialog" aria-label="閉じる">×</button></div><p id="search-song-name"></p><div id="search-destinations" class="search-destinations"></div><p class="subtle">検索先は新しいタブで開きます。</p></div></dialog>
-  <dialog id="work-info-dialog" class="modal" aria-labelledby="work-info-title"><div class="dialog-content"><div class="modal-heading"><h2 id="work-info-title">楽曲情報</h2><button class="icon-button" type="button" data-close="work-info-dialog" aria-label="閉じる">×</button></div><p id="work-info-song"></p><section class="work-info-section"><h3>発売年 <small>Appleの配信情報</small></h3><div id="work-info-release" aria-live="polite"></div><p class="subtle">作品・アルバムごとの発売年です。初発売年と異なる場合があります。</p></section><section class="work-info-section"><h3>作品コードと配信の管理状況 <small>JASRAC J-WID</small></h3><div id="work-info-jasrac" aria-live="polite"></div><p class="subtle">「配信」の著作権管理状況です。配信先や音源の権利などにより、利用手続きが別に必要な場合があります。</p></section></div></dialog>
+  <dialog id="work-info-dialog" class="modal" aria-labelledby="work-info-title"><div class="dialog-content"><div class="modal-heading"><h2 id="work-info-title">楽曲情報</h2><button class="icon-button" type="button" data-close="work-info-dialog" aria-label="閉じる">×</button></div><p id="work-info-song"></p><section class="work-info-section"><h3>作詞・作曲・編曲 <small>JASRAC J-WID</small></h3><div id="work-info-creators" aria-live="polite"></div><p class="subtle">J-WIDに登録された情報です。編曲者は音源ごとに異なる場合があります。</p></section><section class="work-info-section"><h3>発売年 <small>Appleの配信情報</small></h3><div id="work-info-release" aria-live="polite"></div><p class="subtle">作品・アルバムごとの発売年です。初発売年と異なる場合があります。</p></section><section class="work-info-section"><h3>作品コードと配信の管理状況 <small>JASRAC J-WID</small></h3><div id="work-info-jasrac" aria-live="polite"></div><p class="subtle">「配信」の著作権管理状況です。配信先や音源の権利などにより、利用手続きが別に必要な場合があります。</p></section></div></dialog>
 
   <dialog id="operation-dialog" class="modal operation-modal" aria-labelledby="operation-dialog-title"><div class="dialog-content"><div class="modal-heading"><h2 id="operation-dialog-title">曲の操作</h2><button class="icon-button" type="button" data-close="operation-dialog" aria-label="閉じる">×</button></div><p id="operation-song-name"></p><div id="operation-items" class="operation-items"></div></div></dialog>
 

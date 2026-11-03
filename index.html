@@ -12,11 +12,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261103-usability-1">
+  <link rel="stylesheet" href="styles.css?v=20261103-review-1">
   <script src="config.js"></script>
   <script defer src="songlist-core.js?v=20261017-kana-index-1"></script>
   <script defer src="songlist-practice.js?v=20261024-history-time-1"></script>
-  <script defer src="app.js?v=20261103-debug-1"></script>
+  <script defer src="app.js?v=20261103-review-1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -88,6 +88,7 @@
         <div><p class="eyebrow panel-eyebrow">YOUR LIBRARY</p><div class="list-title-row"><h2 id="list-title">マイソングリスト</h2><button id="edit-display-name-button" class="button button-outline user-only hidden" type="button">編集</button></div></div>
         <div class="panel-actions">
           <button id="history-open-button" class="button button-outline user-only hidden" type="button">歌唱履歴</button>
+          <button id="review-open-button" class="button button-outline hidden" type="button">歌唱の振り返り</button>
           <details class="library-tools user-only hidden"><summary>管理・CSV</summary><div class="library-tools-menu">
           <button id="artist-manage-button" class="button button-outline user-only hidden" type="button">アーティスト整理</button>
           <button id="import-button" class="button button-outline user-only hidden" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>CSVを取り込む</button>
@@ -114,6 +115,7 @@
       </div>
       <div id="song-list" class="table-wrap"><div class="loading-state"><span class="loader"></span>リストを準備しています</div></div>
       <div id="mobile-song-list" class="mobile-song-list"></div>
+      <p id="list-progress" class="list-progress" role="status" aria-live="polite"></p>
       <div id="list-pagination" class="list-pagination hidden"><button id="load-more" class="button button-outline load-more" type="button">さらに表示</button><button id="show-all" class="button button-outline" type="button">全て表示</button></div>
       <div id="empty-state" class="empty-state hidden"><div class="empty-music" aria-hidden="true">♪</div><strong id="empty-title">曲が見つかりませんでした</strong><p id="empty-description">検索キーワードや絞り込み条件を変えてみてください。</p><button id="empty-add" class="button button-green hidden" type="button">最初の曲を追加</button><button id="empty-clear" class="button button-outline hidden" type="button">検索をクリア</button></div>
     </section>
@@ -164,6 +166,20 @@
       <ul id="history-records" class="history-records"></ul><button id="history-more" class="button button-outline hidden" type="button">さらに表示</button>
       <section class="history-entry" aria-labelledby="history-entry-heading"><h3 id="history-entry-heading">記録を追加・修正</h3><div class="form-grid"><label class="field field-wide"><span>曲</span><select id="history-add-song" required></select></label><label class="field"><span>歌った日</span><input id="history-add-date" type="date" required></label><label class="field"><span>歌ったときのキー設定</span><select id="history-add-preset" required></select></label></div><p id="history-error" class="form-error hidden" role="alert"></p><div class="modal-actions"><button id="history-edit-cancel" class="button button-outline hidden" type="button">修正をやめる</button><button id="history-save" class="button button-green" type="submit">1回として記録</button></div></section>
     </form>
+  </dialog>
+
+  <dialog id="review-dialog" class="modal review-modal" aria-labelledby="review-title">
+    <div class="dialog-content">
+      <div class="modal-heading"><div><p class="eyebrow">SINGING REVIEW</p><h2 id="review-title">歌唱の振り返り</h2></div><button class="icon-button" type="button" data-close="review-dialog" aria-label="閉じる">×</button></div>
+      <p class="review-intro">歌唱記録から、よく歌った曲を振り返ります。</p>
+      <label class="field review-month"><span>振り返る月</span><input id="review-month" type="month" aria-describedby="review-month-help"></label>
+      <p id="review-month-help" class="subtle">月を選ぶと、その月の集計とランキングが表示されます。</p>
+      <div id="review-summary" class="review-summary" aria-live="polite"></div>
+      <div class="review-rankings"><section aria-labelledby="review-songs-title"><h3 id="review-songs-title">よく歌った曲</h3><ol id="review-songs" class="review-ranking"></ol></section><section aria-labelledby="review-artists-title"><h3 id="review-artists-title">よく歌ったアーティスト</h3><ol id="review-artists" class="review-ranking"></ol></section></div>
+      <section class="review-months-section" aria-labelledby="review-months-title"><h3 id="review-months-title">月ごとの記録</h3><p class="subtle">選択した月から過去12か月を表示します。月を押すと切り替えられます。</p><div id="review-months" class="review-months"></div></section>
+      <p id="review-legacy-note" class="subtle hidden">以前の「最後に歌った日」は、わかっている１回分として集計しています。</p>
+      <p id="review-scope-note" class="subtle"></p>
+    </div>
   </dialog>
 
   <dialog id="import-dialog" class="modal import-modal">

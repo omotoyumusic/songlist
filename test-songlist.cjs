@@ -12,16 +12,20 @@ const window = {
   localStorage: { length: 0, getItem: () => null, setItem() {}, removeItem() {}, key: () => null },
 };
 const elements = {
+  '#review-month': {value:'2026-10'},
+  '#review-summary': {innerHTML:'',style:{}} , '#review-songs': {innerHTML:''}, '#review-artists': {innerHTML:''}, '#review-months': {innerHTML:''}, '#review-legacy-note': {classList:{toggle(){}}}, '#review-scope-note': {textContent:''},
+  '#song-list table': {tBodies:[{html:'',insertAdjacentHTML(_where,html){this.html+=html;}}]}, '#list-progress':{textContent:''},
   '#import-form': {},
   '#import-error': {textContent:'',classList:{remove() {}}},
   '#import-dialog': {closed:false,close() {this.closed=true;}},
   '#import-file': {value:'fixture.csv'}
 };
 class FormDataStub { get(name) { return name === 'import-mode' ? 'merge' : null; } }
+let animationFrames=[]; window.requestAnimationFrame=(callback)=>{animationFrames.push(callback);return animationFrames.length;};
 const context = vm.createContext({ window, document: { querySelector: (selector) => elements[selector] || null }, FormData:FormDataStub, crypto: webcrypto, structuredClone, URLSearchParams, console, setTimeout, clearTimeout });
 vm.runInContext(read('songlist-core.js'), context);
 vm.runInContext(read('songlist-practice.js'), context);
-const source = read('app.js').replace('  start();\n})();', `  window.debugApi = { setShared: (value) => { sharedListMode = value; }, syncInferredReading, csvToSongs, parseCsv, csvCell, sortSongs, normalizeSong, processImport, mergeImportedSongs: typeof mergeImportedSongs === 'function' ? mergeImportedSongs : null, prepareImport: (existing,incoming) => { songs=existing; pendingImport=incoming; canMutate=()=>true; commitSongs=(next)=>{songs=next;return true;}; persistSongs=async()=>true; announce=()=>{}; }, getSongs:()=>songs };\n})();`);
+const source = read('app.js').replace('  start();\n})();', `  window.debugApi = { setShared: (value) => { sharedListMode = value; }, syncInferredReading, singingReview, reviewMonths, renderReview, appendMoreSongs, setupIncremental:(list) => { pageLimit=0; listRenderGeneration++; incrementalList={generation:listRenderGeneration,list,mobile:false}; songRow=(s)=>s.id+'|'; fitTableColumns=()=>{}; scheduleKanaLayout=()=>{}; return listRenderGeneration; }, incrementalState:()=>({pageLimit,incrementalList}), setReviewSongs: (value) => { songs=value; }, csvToSongs, parseCsv, csvCell, sortSongs, normalizeSong, processImport, mergeImportedSongs: typeof mergeImportedSongs === 'function' ? mergeImportedSongs : null, prepareImport: (existing,incoming) => { songs=existing; pendingImport=incoming; canMutate=()=>true; commitSongs=(next)=>{songs=next;return true;}; persistSongs=async()=>true; announce=()=>{}; }, getSongs:()=>songs };\n})();`);
 assert.notEqual(source, read('app.js'), 'Could not load app functions');
 vm.runInContext(source, context);
 const api = window.debugApi, practice = window.SonglistPractice, core = window.SonglistCore;
@@ -36,6 +40,47 @@ const sample = {
 const checks = [];
 function check(name, fn) { try { fn(); checks.push([name, true]); } catch (error) { checks.push([name, false, error.message]); } }
 
+check('Singing review counts records, unique songs, days, artists and previous months', () => {
+  const first = {...sample, id:'one', artist:'歌手A', title:'曲A', extra:{practice:{history:[{id:'a',date:'2026-10-02'},{id:'b',date:'2026-10-02'},{id:'c',date:'2026-09-30'}]}}};
+  const second = {...sample, id:'two', artist:'歌手A', title:'曲B', extra:{practice:{history:[{id:'d',date:'2026-10-03'}]}}};
+  const third = {...sample, id:'three', artist:'歌手B', title:'曲C', lastSung:'2026-10-04', extra:{}};
+  const result = api.singingReview([first,second,third], '2026-10');
+  assert.equal(result.total,4); assert.equal(result.songCount,3); assert.equal(result.dayCount,3);
+  assert.equal(result.songsRanked[0].song.id,'one'); assert.equal(result.songsRanked[0].count,2);
+  assert.equal(result.artistsRanked[0].name,'歌手A'); assert.equal(result.artistsRanked[0].count,3);
+  assert.equal(result.monthCounts.get('2026-09').count,1); assert.equal(result.hasLegacy,true);
+  assert.deepEqual(plain(api.reviewMonths('2026-01').slice(0,3)),['2026-01','2025-12','2025-11']);
+  assert.equal(api.singingReview([first], '2026-08').total,0);
+});
+check('Shared singing review uses monthly totals without private history dates', () => {
+  const first = api.normalizeSong({id:'1', artist:'歌手', title:'曲A', singingMonths:{'2026-10':3,'2026-09':1}},0);
+  const second = api.normalizeSong({id:'2', artist:'歌手', title:'曲B', singingMonths:{'2026-10':1,'invalid':99}},1);
+  const review = api.singingReview([first,second], '2026-10', true);
+  assert.equal(review.total,4); assert.equal(review.songCount,2); assert.equal(review.dayCount,null);
+  assert.equal(review.artistsRanked[0].count,4); assert.equal(review.songsRanked[0].count,3);
+  assert.equal(review.monthCounts.get('2026-09').count,1); assert.equal(second.singingMonths.invalid,undefined);
+});
+check('Review renders counts, empty months and safely displays song names', () => {
+  api.setReviewSongs([{...sample, id:'x', title:'<script>alert(1)</script>', artist:'歌手', lastSung:'2026-10-20', extra:{}}]);
+  elements['#review-month'].value = '2026-10'; api.renderReview();
+  assert.match(elements['#review-summary'].innerHTML,/歌唱回数/);
+  assert.match(elements['#review-songs'].innerHTML,/&lt;script&gt;/);
+  assert.doesNotMatch(elements['#review-songs'].innerHTML,/<script>/);
+  assert.match(elements['#review-months'].innerHTML,/2026年9月/);
+  elements['#review-month'].value = '2026-09'; api.renderReview();
+  assert.match(elements['#review-songs'].innerHTML,/歌唱記録はありません/);
+});
+check('Incremental list appends in order and cancels old renders', () => {
+  const table=elements['#song-list table'].tBodies[0]; table.html=''; animationFrames=[];
+  const old=api.setupIncremental(Array.from({length:150},(_,i)=>({id:'old'+i})));
+  api.appendMoreSongs(old); assert.equal(api.incrementalState().pageLimit,60);
+  const current=api.setupIncremental(Array.from({length:125},(_,i)=>({id:'new'+i}))); table.html='';
+  api.appendMoreSongs(current,105); assert.equal(api.incrementalState().pageLimit,105);
+  while(animationFrames.length) animationFrames.shift()();
+  assert.equal(api.incrementalState().pageLimit,125);
+  assert.equal(table.html.split('|').filter(Boolean).length,125);
+  assert.ok(!table.html.includes('old')); assert.ok(table.html.endsWith('new124|'));
+});
 check('Kana readings follow typing and preserve manual corrections', () => {
   const name = {value:'あ'}, reading = {value:'',dataset:{}};
   api.syncInferredReading(name,reading); assert.equal(reading.value,'あ');

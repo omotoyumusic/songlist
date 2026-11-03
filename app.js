@@ -34,6 +34,8 @@
   let conflictState = null;
   let shareRecord = null;
   let pageLimit = 100;
+  let incrementalList = null;
+  let listRenderGeneration = 0;
   let recoveryMode = new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery';
   let authBusy = false;
   let mailCooldown = 0;
@@ -258,6 +260,8 @@
   }
 
   function render() {
+    const generation = ++listRenderGeneration;
+    incrementalList = null;
     updateArtistOptions();
     const scope = sharedListMode ? 'share:' + new URLSearchParams(window.location.search).get('list') : 'user:' + (user?.id || '');
     if (renderedListScope !== scope) openMobileSongs.clear();
@@ -269,6 +273,7 @@
     const focused = document.activeElement?.dataset;
     const focusKey = focused?.action ? {action:focused.action,id:focused.id,delta:focused.delta} : null;
     if ($('#history-dialog').open) renderHistory();
+    if ($('#review-dialog').open && (personalView() || sharedListMode)) renderReview();
     const list = filteredSongs();
     updateKanaIndex(list);
     const canEdit = personalView();
@@ -290,6 +295,7 @@
       $('#song-list').innerHTML = '';
       $('#mobile-song-list').innerHTML = '';
       $('#list-pagination').classList.add('hidden');
+      $('#list-progress').textContent = '';
       updateDataUi();
       return;
     }
@@ -298,10 +304,10 @@
     const notesHead = canEdit ? '<th scope="col">備考</th>' : '';
     const notesCol = canEdit ? '<col class="notes">' : '';
     const listType = canEdit ? ' owner-list' : ' public-list';
+    pageLimit = Math.min(100, list.length);
     const shown = list.slice(0, pageLimit);
-    $('#list-pagination').classList.toggle('hidden', list.length <= shown.length || loadState !== 'ready');
-    $('#show-all').setAttribute('aria-label','検索・絞り込みに合う全' + list.length + '曲を表示');
-    $('#load-more').textContent = 'さらに表示（残り ' + (list.length - shown.length) + ' 曲）';
+    $('#list-pagination').classList.add('hidden');
+    $('#list-progress').textContent = list.length > pageLimit ? '残りの曲を表示しています…' : '';
     if (mobileLayout.matches) {
       if ($('#song-list').hasChildNodes()) $('#song-list').replaceChildren();
       $('#mobile-song-list').innerHTML = shown.map(songCard).join('');
@@ -311,13 +317,42 @@
       $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th class="key-heading" scope="col"><span class="fit-heading">（移調）原曲 → 歌うキー / 平行調</span></th><th class="search-heading" scope="col" title="Chordwiki・YouTube・カラオケ・コード譜・歌詞・JASRAC"><span class="fit-heading">検索</span></th><th class="last-heading" scope="col"><span class="fit-heading">最後に歌った日</span></th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
       fitTableColumns();
     }
+    if (pageLimit < list.length && loadState === 'ready') {
+      incrementalList = { generation, list, mobile: mobileLayout.matches };
+      scheduleMoreSongs(incrementalList);
+    }
     updateDataUi();
     if (focusKey) [...document.querySelectorAll('[data-action]')].find((el) => el.dataset.action === focusKey.action && el.dataset.id === focusKey.id && el.dataset.delta === focusKey.delta && el.offsetParent)?.focus({preventScroll:true});
+  }
+
+  function scheduleMoreSongs(state) {
+    if (state.frame) return;
+    state.frame = window.requestAnimationFrame(() => { state.frame = 0; appendMoreSongs(state.generation); });
+  }
+  function appendMoreSongs(generation, through = pageLimit + 60) {
+    const state = incrementalList;
+    if (!state || state.generation !== generation || generation !== listRenderGeneration || state.mobile !== mobileLayout.matches) return;
+    const end = Math.min(state.list.length, Math.max(pageLimit, through));
+    if (end > pageLimit) {
+      const chunk = state.list.slice(pageLimit, end);
+      const container = state.mobile ? $('#mobile-song-list') : $('#song-list table')?.tBodies[0];
+      if (!container) return;
+      container.insertAdjacentHTML('beforeend', chunk.map(state.mobile ? songCard : songRow).join(''));
+      if (state.mobile) chunk.forEach((song) => { if (openMobileSongs.has(song.id)) { const card = [...container.children].find((node) => node.dataset.songId === song.id); if (card) card.open = true; } });
+      pageLimit = end;
+    }
+    if (pageLimit >= state.list.length) {
+      incrementalList = null;
+      $('#list-progress').textContent = '';
+      if (!state.mobile) fitTableColumns();
+      scheduleKanaLayout();
+    } else scheduleMoreSongs(state);
   }
 
   function updateAccessUi() {
     const canShowApp = Boolean(user || sharedListMode);
     if (!user) document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+    $('#review-open-button').classList.toggle('hidden', !canShowApp);
     $('#auth-gate').classList.toggle('hidden', canShowApp || recoveryMode);
     $('#recovery-gate').classList.toggle('hidden', !recoveryMode);
     $('#app-shell').classList.toggle('hidden', !canShowApp || recoveryMode);
@@ -480,6 +515,7 @@
       transpose: Math.max(-24, Math.min(24, Number(song.transpose || 0) || 0)),
       lastSung: String(song.lastSung || ''),
       ...(Number.isInteger(song.singingCount) && song.singingCount >= 0 ? { singingCount: song.singingCount } : {}),
+      ...(song.singingMonths && typeof song.singingMonths === 'object' && !Array.isArray(song.singingMonths) ? { singingMonths: Object.fromEntries(Object.entries(song.singingMonths).filter(([month,count]) => /^\d{4}-(?:0[1-9]|1[0-2])$/.test(month) && Number.isSafeInteger(count) && count > 0)) } : {}),
       notes: String(song.notes || ''),
       visible: song.visible !== false,
       extra: song.extra && typeof song.extra === 'object' ? song.extra : {}
@@ -1148,6 +1184,7 @@
     document.querySelectorAll('#add-button,#empty-add,#import-button,#artist-manage-button,#save-song-button,[data-action]:not([data-action="chord-search"]):not([data-action="search-menu"]):not([data-action="work-info"])').forEach((el) => { el.disabled = !canMutate(false); });
     $('#export-button').disabled = loadState !== 'ready';
     $('#history-open-button').disabled = loadState !== 'ready';
+    $('#review-open-button').disabled = loadState !== 'ready';
     $('#history-save').disabled = !canMutate(false) || songs.length === 0;
     document.querySelectorAll('#history-records button').forEach((button) => { button.disabled = !canMutate(false); });
     $('#share-button').disabled = loadState !== 'ready' || dirty || saving || pendingDrafts.length > 0;
@@ -1259,7 +1296,7 @@
   }
   function updateShareDialog() {
     $('#share-state').textContent = shareRecord?.enabled ? '共有中' : '共有停止中';
-    $('#share-description').textContent = '「表示する」が有効な ' + songs.filter((s) => s.visible).length + ' 曲・表示名・歌唱回数を共有します。歌唱履歴の詳細・備考・非表示曲は共有しません。リンクを知る人はログインせずに閲覧・検索できます。';
+    $('#share-description').textContent = '「表示する」が有効な ' + songs.filter((s) => s.visible).length + ' 曲・表示名・歌唱回数・月ごとの歌唱回数を共有します。最後に歌った日以外の歌唱日・備考・非表示曲は共有しません。リンクを知る人はログインせずに閲覧・検索できます。';
     $('#share-enable').textContent = shareRecord?.enabled ? '表示名を保存してURLをコピー' : '共有を開始してURLをコピー';
     $('#share-stop').disabled = !shareRecord?.enabled;
     $('#share-rotate').disabled = !shareRecord;
@@ -1581,6 +1618,60 @@
     if (!commitSongs(songs.map((s) => s.id === song.id ? updated : s))) return;
     if (await persistSongs()) announce('今日の歌唱を記録しました（記録 ' + Practice.get(updated).history.length + '回）。');
   }
+  function singingReview(list, month, shared = false) {
+    const songCounts = new Map(), artistCounts = new Map(), monthCounts = new Map(), days = new Set();
+    let total = 0, hasLegacy = false;
+    function add(song, period, count, date) {
+      let row = monthCounts.get(period);
+      if (!row) monthCounts.set(period, row = { count:0, songIds:new Set() });
+      row.count += count; row.songIds.add(song.id);
+      if (period !== month) return;
+      total += count;
+      if (date) days.add(date);
+      let entry = songCounts.get(song.id);
+      if (!entry) songCounts.set(song.id, entry = { song, count:0 });
+      entry.count += count;
+      artistCounts.set(song.artist, (artistCounts.get(song.artist) || 0) + count);
+    }
+    for (const song of list) {
+      if (shared) {
+        for (const [period,count] of Object.entries(song.singingMonths || {})) add(song,period,count,null);
+      } else {
+        for (const record of Practice.get(song).history) { hasLegacy ||= Boolean(record.legacy); add(song,record.date.slice(0,7),1,record.date); }
+      }
+    }
+    const songsRanked = [...songCounts.values()].sort((a,b) => b.count-a.count || collator.compare(a.song.artistKana || a.song.artist,b.song.artistKana || b.song.artist) || collator.compare(a.song.songKana || a.song.title,b.song.songKana || b.song.title) || collator.compare(a.song.id,b.song.id));
+    const artistsRanked = [...artistCounts].map(([name,count]) => ({name,count})).sort((a,b) => b.count-a.count || collator.compare(a.name,b.name));
+    return { total, songCount:songCounts.size, dayCount:shared ? null : days.size, songsRanked, artistsRanked, monthCounts, hasLegacy };
+  }
+  function reviewMonths(month) {
+    const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month);
+    if (!match) return [];
+    const start = Number(match[1]) * 12 + Number(match[2]) - 1;
+    return Array.from({length:12}, (_,i) => start-i).filter((value) => value >= 12).map((value) => String(Math.floor(value / 12)).padStart(4,'0') + '-' + String(value % 12 + 1).padStart(2,'0'));
+  }
+  function formatMonth(month) { return Number(month.slice(0,4)) + '年' + Number(month.slice(5,7)) + '月'; }
+  function renderReview() {
+    const month = $('#review-month').value;
+    if (!reviewMonths(month).length) { $('#review-month').value = localDate().slice(0,7); return renderReview(); }
+    const data = singingReview(songs, month, sharedListMode);
+    $('#review-scope-note').textContent = sharedListMode ? '閲覧用に表示されている曲のみを集計しています。最後に歌った日以外の歌唱日や備考は共有されません。' : '削除した曲の歌唱履歴は集計に含まれません。';
+    const stats = [['歌唱回数',data.total,'回'],['歌った曲',data.songCount,'曲']];
+    if (!sharedListMode) stats.push(['歌った日',data.dayCount,'日']);
+    $('#review-summary').style.gridTemplateColumns = 'repeat(' + stats.length + ', minmax(0,1fr))';
+    $('#review-summary').innerHTML = stats.map(([label,count,unit]) => '<div class="review-stat"><span>' + label + '</span><strong>' + count.toLocaleString('ja-JP') + '<small>' + unit + '</small></strong></div>').join('');
+    const ranked = (items, name) => items.length ? items.slice(0,10).map((item,index) => '<li><span class="review-rank-number">' + (index+1) + '</span><span class="review-rank-name">' + name(item) + '</span><strong>' + item.count.toLocaleString('ja-JP') + '回</strong></li>').join('') : '<li class="review-empty">この月の歌唱記録はありません</li>';
+    $('#review-songs').innerHTML = ranked(data.songsRanked, (item) => escapeHtml(item.song.title) + '<small>' + escapeHtml(item.song.artist) + '</small>');
+    $('#review-artists').innerHTML = ranked(data.artistsRanked, (item) => escapeHtml(item.name));
+    $('#review-months').innerHTML = reviewMonths(month).map((item) => { const row = data.monthCounts.get(item); return '<button type="button" class="review-month-row" data-review-month="' + item + '" aria-pressed="' + (item === month) + '"><span>' + formatMonth(item) + '</span><span><strong>' + (row?.count || 0) + '</strong>回 ・ ' + (row?.songIds.size || 0) + '曲</span></button>'; }).join('');
+    $('#review-legacy-note').classList.toggle('hidden', !data.hasLegacy);
+  }
+  function openReview() {
+    if ((!personalView() && !sharedListMode) || loadState !== 'ready') return;
+    $('#review-month').value = localDate().slice(0,7);
+    renderReview();
+    if (!$('#review-dialog').open) $('#review-dialog').showModal();
+  }
   function historyOptions(selected='') {
     return sortSongs(songs.slice(),'artist').map((song) => '<option value="' + escapeHtml(song.id) + '"' + (song.id === selected ? ' selected' : '') + '>' + escapeHtml(song.artist + ' / ' + song.title) + '</option>').join('');
   }
@@ -1662,6 +1753,9 @@
   }
   function setupPracticeEvents() {
     $('#history-open-button').addEventListener('click',() => openHistory());
+    $('#review-open-button').addEventListener('click',openReview);
+    $('#review-month').addEventListener('change',renderReview);
+    $('#review-months').addEventListener('click',(event) => { const button = event.target.closest('[data-review-month]'); if (!button) return; $('#review-month').value = button.dataset.reviewMonth; renderReview(); });
     $('#history-song-filter').addEventListener('change',() => { historyLimit=100; renderHistory(); });
     $('#history-month').addEventListener('change',() => { historyLimit=100; renderHistory(); });
     $('#history-clear-month').addEventListener('click',() => { $('#history-month').value=''; historyLimit=100; renderHistory(); });
@@ -1816,8 +1910,7 @@
     showKanaFeedback(group);
     if (!target) return;
     if (target.index >= pageLimit) {
-      pageLimit = Math.ceil((target.index+1)/100)*100;
-      render();
+      if (incrementalList) appendMoreSongs(incrementalList.generation, target.index + 1);
     }
     const item = [...kanaItems()].find((row) => row.dataset.songId === target.id);
     if (!item) return;

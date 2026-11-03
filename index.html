@@ -12,11 +12,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261102-title-touch-1">
+  <link rel="stylesheet" href="styles.css?v=20261103-kana-1">
   <script src="config.js"></script>
   <script defer src="songlist-core.js?v=20261017-kana-index-1"></script>
   <script defer src="songlist-practice.js?v=20261024-history-time-1"></script>
-  <script defer src="app.js?v=20261102-title-search-1"></script>
+  <script defer src="app.js?v=20261103-kana-1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -109,7 +109,7 @@
         </div>
       </div>
 
-      <p id="search-help" class="search-help">スペースで区切ると、アーティスト名と曲名を組み合わせて検索できます。<span id="kana-index-help" class="hidden">右端の「あ・か…」で読み仮名の行に移動できます。</span></p>
+      <p id="search-help" class="search-help">スペースで区切ると、アーティスト名と曲名を組み合わせて検索できます。<span id="kana-index-help" class="hidden">右端の五十音で読み仮名の先頭に移動できます。</span></p>
       <div class="list-meta"><span id="result-count" role="status" aria-live="polite">曲を表示しています</span><span class="sort-note"><span class="sort-symbol">↕</span> 五十音順</span></div>
       </div>
       <div id="song-list" class="table-wrap"><div class="loading-state"><span class="loader"></span>リストを準備しています</div></div>
@@ -150,7 +150,7 @@
     </form>
   </dialog>
 
-  <dialog id="search-dialog" class="modal search-modal" aria-labelledby="search-dialog-title"><div class="dialog-content"><div class="modal-heading"><h2 id="search-dialog-title">検索先を選ぶ</h2><button class="icon-button" type="button" data-close="search-dialog" aria-label="閉じる">×</button></div><p id="search-song-name"></p><div id="search-destinations" class="search-destinations"></div><p class="subtle">検索結果を新しいタブで開きます。</p></div></dialog>
+  <dialog id="search-dialog" class="modal search-modal" aria-labelledby="search-dialog-title"><div class="dialog-content"><div class="modal-heading"><h2 id="search-dialog-title">検索先を選ぶ</h2><button class="icon-button" type="button" data-close="search-dialog" aria-label="閉じる">×</button></div><p id="search-song-name"></p><div id="search-destinations" class="search-destinations"></div><p class="subtle">新しいタブで開きます。JASRACは公式サイトの「作品検索 J-WID」から曲名を入力してください。</p></div></dialog>
 
   <dialog id="operation-dialog" class="modal operation-modal" aria-labelledby="operation-dialog-title"><div class="dialog-content"><div class="modal-heading"><h2 id="operation-dialog-title">曲の操作</h2><button class="icon-button" type="button" data-close="operation-dialog" aria-label="閉じる">×</button></div><p id="operation-song-name"></p><div id="operation-items" class="operation-items"></div></div></dialog>
 

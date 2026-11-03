@@ -227,7 +227,7 @@
     const key = sungKey(song);
     const relative = parallelKey(key);
     const original = song.key || '—';
-    const chordSearch = '<button class="search-menu-button" type="button" data-action="search-menu" data-id="' + escapeHtml(song.id) + '" title="Chordwiki・YouTube・YouTubeカラオケ・コード譜・歌詞検索" aria-label="' + escapeHtml(song.title) + 'を検索">検索 ▾</button>';
+    const chordSearch = '<button class="search-menu-button" type="button" data-action="search-menu" data-id="' + escapeHtml(song.id) + '" title="Chordwiki・YouTube・カラオケ・コード譜・歌詞・JASRAC" aria-label="' + escapeHtml(song.title) + 'を検索">検索 ▾</button>';
     const searchCell = '<td class="search-cell"><div class="row-actions search-actions">' + chordSearch + '</div></td>';
     const actionCell = personalView() ? '<td class="operations-cell"><button class="operation-menu-button" type="button" data-action="operation-menu" data-id="' + escapeHtml(song.id) + '" aria-haspopup="dialog" aria-controls="operation-dialog" aria-label="' + escapeHtml(song.artist + ' ' + song.title + 'の操作') + '" title="曲の操作"><span aria-hidden="true">⚙️</span></button></td>' : '';
     const transposeLabel = '(' + signed(song.transpose) + ')';
@@ -299,7 +299,7 @@
       $('#mobile-song-list').querySelectorAll('.song-card').forEach((card) => { card.open = openMobileSongs.has(card.dataset.songId); });
     } else {
       if ($('#mobile-song-list').hasChildNodes()) $('#mobile-song-list').replaceChildren();
-      $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th class="key-heading" scope="col"><span class="fit-heading">（移調）原曲 → 歌うキー / 平行調</span></th><th class="search-heading" scope="col" title="Chordwiki・YouTube・YouTubeカラオケ・コード譜・歌詞検索"><span class="fit-heading">検索</span></th><th class="last-heading" scope="col"><span class="fit-heading">最後に歌った日</span></th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
+      $('#song-list').innerHTML = '<table class="song-table' + listType + '"><colgroup><col class="artist"><col class="title"><col class="key"><col class="search"><col class="last">' + notesCol + actionCol + '</colgroup><thead><tr><th scope="col">アーティスト</th><th scope="col">曲名</th><th class="key-heading" scope="col"><span class="fit-heading">（移調）原曲 → 歌うキー / 平行調</span></th><th class="search-heading" scope="col" title="Chordwiki・YouTube・カラオケ・コード譜・歌詞・JASRAC"><span class="fit-heading">検索</span></th><th class="last-heading" scope="col"><span class="fit-heading">最後に歌った日</span></th>' + notesHead + actionHead + '</tr></thead><tbody>' + shown.map(songRow).join('') + '</tbody></table>';
       fitTableColumns();
     }
     updateDataUi();
@@ -1373,11 +1373,12 @@
       { label:'YouTube', href:'https://www.youtube.com/results?search_query=' + encodeURIComponent(query) },
       { label:'YouTube カラオケ', href:'https://www.youtube.com/results?search_query=' + encodeURIComponent(query + ' カラオケ') },
       { label:'コード譜', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' コード譜') },
-      { label:'歌詞', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' 歌詞') }
+      { label:'歌詞', href:'https://www.google.com/search?q=' + encodeURIComponent(query + ' 歌詞') },
+      { label:'JASRAC 公式サイト', href:'https://www.jasrac.or.jp/', ariaLabel:'JASRAC公式サイトを開く（新しいタブ）' }
     ];
   }
   function searchLinks(song) {
-    return searchDestinations(song).map((item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>').join('');
+    return searchDestinations(song).map((item) => '<a class="button button-outline" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(item.ariaLabel || song.artist + ' ' + song.title + 'を' + item.label + 'で検索（新しいタブ）') + '">' + item.label + ' ↗</a>').join('');
   }
   function openSearchMenu(song) {
     $('#search-song-name').textContent = song.artist + ' / ' + song.title;
@@ -1575,19 +1576,17 @@
     });
   }
 
-  const kanaSections = [
-    ['あ','あいうえおぁぃぅぇぉ'],['か','かきくけこゕゖ'],['さ','さしすせそ'],
-    ['た','たちつてとっ'],['な','なにぬねの'],['は','はひふへほ'],
-    ['ま','まみむめも'],['や','やゆよゃゅょ'],['ら','らりるれろ'],['わ','わをんゎゐゑ'],['他','']
-  ];
+  const kanaSections = [...'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん', '他'];
+  const smallKana = { 'ぁ':'あ', 'ぃ':'い', 'ぅ':'う', 'ぇ':'え', 'ぉ':'お', 'っ':'つ', 'ゃ':'や', 'ゅ':'ゆ', 'ょ':'よ', 'ゎ':'わ', 'ゕ':'か', 'ゖ':'け', 'ゐ':'い', 'ゑ':'え' };
   const kanaNavigation = { targets:new Map(), enabled:false, dragging:false, pointerId:null, pointGroup:'', jumpedGroup:'', suppressedUntil:0, frame:0, feedbackTimer:0 };
   function kanaGroup(song) {
     const titleOrder = $('#sort-mode').value === 'title';
     const reading = titleOrder ? song.songKana || song.title : song.artistKana || song.artist;
     const first = normalizeReading(reading).normalize('NFD').replace(/[\u3099\u309a]/gu,'').replace(/^[\s\p{P}\p{S}ー]+/u,'').charAt(0);
-    return kanaSections.find(([,characters]) => characters.includes(first) && first)?.[0] || '他';
+    const initial = smallKana[first] || first;
+    return initial && kanaSections.includes(initial) ? initial : '他';
   }
-  function kanaLabel(group) { return group === '他' ? '英数字・その他' : group + '行'; }
+  function kanaLabel(group) { return group === '他' ? '英数字・その他' : group; }
   function setKanaCurrent(group) {
     $('#kana-index').querySelectorAll('button').forEach((button) => {
       if (button.dataset.kana === group) button.setAttribute('aria-current','location');
@@ -1647,7 +1646,7 @@
     const visible = bottom - top >= 220 && !document.querySelector('dialog[open]');
     nav.classList.toggle('hidden',!visible);
     if (!visible) return;
-    const height = Math.min(330,bottom-top);
+    const height = Math.min(440,bottom-top);
     nav.style.top = (top + (bottom-top-height)/2) + 'px';
     nav.style.height = height + 'px';
     nav.style.left = mobile ? '' : (list.right + 8) + 'px';
@@ -1699,7 +1698,14 @@
   }
   function moveKanaPointer(event) {
     const buttons = [...$('#kana-index').querySelectorAll('button')];
-    const button = buttons.find((item) => event.clientY < item.getBoundingClientRect().bottom) || buttons.at(-1);
+    const button = buttons.reduce((nearest, item) => {
+      const rect = item.getBoundingClientRect();
+      const dx = Math.max(rect.left - event.clientX, 0, event.clientX - rect.right);
+      const dy = Math.max(rect.top - event.clientY, 0, event.clientY - rect.bottom);
+      const distance = dx * dx + dy * dy;
+      return !nearest || distance < nearest.distance ? { item, distance } : nearest;
+    }, null)?.item;
+    if (!button) return;
     const group = button.dataset.kana;
     if (group === kanaNavigation.pointGroup) return;
     kanaNavigation.pointGroup = group;
@@ -1720,7 +1726,7 @@
   }
   function setupKanaIndex() {
     const nav=$('#kana-index');
-    nav.innerHTML=kanaSections.map(([group]) => '<button type="button" data-kana="'+group+'" aria-controls="mobile-song-list">'+group+'</button>').join('');
+    nav.innerHTML=kanaSections.map((group) => '<button type="button" data-kana="'+group+'" aria-controls="mobile-song-list">'+group+'</button>').join('');
     nav.addEventListener('pointerdown',(event) => {
       if (!kanaNavigation.enabled || !event.isPrimary || event.button!==0) return;
       event.preventDefault();
@@ -1742,12 +1748,12 @@
       jumpKana(button.dataset.kana,true);
     });
     nav.addEventListener('keydown',(event) => {
-      if (!['ArrowUp','ArrowDown','Home','End'].includes(event.key)) return;
+      if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
       const buttons=[...nav.querySelectorAll('button[aria-disabled="false"]')];
       if (!buttons.length) return;
       event.preventDefault();
       const current=buttons.indexOf(document.activeElement);
-      const next=event.key==='Home' ? 0 : event.key==='End' ? buttons.length-1 : Math.max(0,Math.min(buttons.length-1,current+(event.key==='ArrowDown' ? 1 : -1)));
+      const next=event.key==='Home' ? 0 : event.key==='End' ? buttons.length-1 : Math.max(0,Math.min(buttons.length-1,current+(['ArrowDown','ArrowRight'].includes(event.key) ? 1 : -1)));
       buttons[next].focus({preventScroll:true}); jumpKana(buttons[next].dataset.kana,true);
     });
     window.addEventListener('scroll',scheduleKanaLayout,{passive:true});

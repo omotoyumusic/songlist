@@ -380,8 +380,8 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .list-pagination .load-more { display: inline-flex; margin: 0; }
 .list-pagination .button { min-height: 44px; }
 #kana-index-help { display: block; margin-top: 4px; color: #51745c; }
-.kana-index { position: fixed; right: max(12px,env(safe-area-inset-right)); z-index: 8; display: grid; grid-template-rows: repeat(11,minmax(0,1fr)); width: 28px; padding: 3px 0; border: 1px solid #d7e8dc; border-radius: 16px; background: #f6fbf7f2; box-shadow: 0 2px 10px #17392612; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: width .12s; }
-.kana-index.is-dragging, .kana-index:focus-within { width: 46px; background: #e9f5ed; box-shadow: 0 3px 15px #17392625; }
+.kana-index { position: fixed; right: max(12px,env(safe-area-inset-right)); z-index: 8; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); grid-template-rows: repeat(16,minmax(0,1fr)); width: 66px; padding: 3px; border: 1px solid #d7e8dc; border-radius: 16px; background: #f6fbf7f2; box-shadow: 0 2px 10px #17392612; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: width .12s; }
+.kana-index.is-dragging, .kana-index:focus-within { width: 78px; background: #e9f5ed; box-shadow: 0 3px 15px #17392625; }
 .kana-index button { min-width: 0; min-height: 0; display: grid; place-items: center; width: 100%; padding: 0; border: 0; border-radius: 12px; background: transparent; color: #337149; font-size: 12px; font-weight: 650; line-height: 1; touch-action: none; -webkit-tap-highlight-color: transparent; }
 .kana-index button[aria-disabled="true"] { color: #a3b6a9; font-weight: 400; }
 .kana-index button[aria-current="location"] { color: #fff; background: #287c49; }
@@ -390,10 +390,10 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .kana-index-feedback strong { font-size: 54px; line-height: 1; }
 .kana-index-feedback span { color: #52755d; font-size: 12px; }
 @media (min-width: 701px) {
-  .table-wrap.has-kana-index { width: calc(100% - 44px); }
+  .table-wrap.has-kana-index { width: calc(100% - 86px); }
 }
 @media (max-width: 700px) {
-  .mobile-song-list.has-kana-index { padding-right: 43px; }
+  .mobile-song-list.has-kana-index { padding-right: 82px; }
 }
 @media (prefers-reduced-motion: reduce) { .kana-index { transition: none; } }
 

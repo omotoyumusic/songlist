@@ -472,3 +472,6 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 
 .list-progress { margin: 8px 12px; color: #718579; font-size: 12px; }
 .list-progress:empty { display: none; }
+
+.public-singing-count { display: block; margin-top: 5px; color: #386e49; font: 600 9px "DM Sans", "Noto Sans JP", sans-serif; white-space: nowrap; }
+.card-singing-count { color: #386e49; font-size: 12px; line-height: 1.5; }

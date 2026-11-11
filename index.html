@@ -12,11 +12,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261109-public-count-1">
+  <link rel="stylesheet" href="styles.css?v=20261111-cleanup-1">
   <script src="config.js"></script>
   <script defer src="songlist-core.js?v=20261017-kana-index-1"></script>
   <script defer src="songlist-practice.js?v=20261024-history-time-1"></script>
-  <script defer src="app.js?v=20261109-public-count-1"></script>
+  <script defer src="app.js?v=20261111-cleanup-1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -116,7 +116,6 @@
       <div id="song-list" class="table-wrap"><div class="loading-state"><span class="loader"></span>リストを準備しています</div></div>
       <div id="mobile-song-list" class="mobile-song-list"></div>
       <p id="list-progress" class="list-progress" role="status" aria-live="polite"></p>
-      <div id="list-pagination" class="list-pagination hidden"><button id="load-more" class="button button-outline load-more" type="button">さらに表示</button><button id="show-all" class="button button-outline" type="button">全て表示</button></div>
       <div id="empty-state" class="empty-state hidden"><div class="empty-music" aria-hidden="true">♪</div><strong id="empty-title">曲が見つかりませんでした</strong><p id="empty-description">検索キーワードや絞り込み条件を変えてみてください。</p><button id="empty-add" class="button button-green hidden" type="button">最初の曲を追加</button><button id="empty-clear" class="button button-outline hidden" type="button">検索をクリア</button></div>
     </section>
 

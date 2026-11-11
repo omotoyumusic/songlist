@@ -25,7 +25,7 @@ let animationFrames=[]; window.requestAnimationFrame=(callback)=>{animationFrame
 const context = vm.createContext({ window, document: { querySelector: (selector) => elements[selector] || null }, FormData:FormDataStub, crypto: webcrypto, structuredClone, URLSearchParams, console, setTimeout, clearTimeout });
 vm.runInContext(read('songlist-core.js'), context);
 vm.runInContext(read('songlist-practice.js'), context);
-const source = read('app.js').replace('  start();\n})();', `  window.debugApi = { setShared: (value) => { sharedListMode = value; }, syncInferredReading, singingReview, reviewMonths, renderReview, appendMoreSongs, setupIncremental:(list) => { pageLimit=0; listRenderGeneration++; incrementalList={generation:listRenderGeneration,list,mobile:false}; songRow=(s)=>s.id+'|'; fitTableColumns=()=>{}; scheduleKanaLayout=()=>{}; return listRenderGeneration; }, incrementalState:()=>({pageLimit,incrementalList}), setReviewSongs: (value) => { songs=value; }, csvToSongs, parseCsv, csvCell, sortSongs, normalizeSong, processImport, mergeImportedSongs: typeof mergeImportedSongs === 'function' ? mergeImportedSongs : null, prepareImport: (existing,incoming) => { songs=existing; pendingImport=incoming; canMutate=()=>true; commitSongs=(next)=>{songs=next;return true;}; persistSongs=async()=>true; announce=()=>{}; }, getSongs:()=>songs };\n})();`);
+const source = read('app.js').replace('  start();\n})();', `  window.debugApi = { setShared: (value) => { sharedListMode = value; }, syncInferredReading, selectReleaseCandidates, singingReview, reviewMonths, renderReview, appendMoreSongs, setupIncremental:(list) => { pageLimit=0; listRenderGeneration++; incrementalList={generation:listRenderGeneration,list,mobile:false}; songRow=(s)=>s.id+'|'; fitTableColumns=()=>{}; scheduleKanaLayout=()=>{}; return listRenderGeneration; }, incrementalState:()=>({pageLimit,incrementalList}), setReviewSongs: (value) => { songs=value; }, csvToSongs, parseCsv, csvCell, sortSongs, normalizeSong, processImport, mergeImportedSongs: typeof mergeImportedSongs === 'function' ? mergeImportedSongs : null, prepareImport: (existing,incoming) => { songs=existing; pendingImport=incoming; canMutate=()=>true; commitSongs=(next)=>{songs=next;return true;}; persistSongs=async()=>true; announce=()=>{}; }, getSongs:()=>songs };\n})();`);
 assert.notEqual(source, read('app.js'), 'Could not load app functions');
 vm.runInContext(source, context);
 const api = window.debugApi, practice = window.SonglistPractice, core = window.SonglistCore;
@@ -80,6 +80,15 @@ check('Incremental list appends in order and cancels old renders', () => {
   assert.equal(api.incrementalState().pageLimit,125);
   assert.equal(table.html.split('|').filter(Boolean).length,125);
   assert.ok(!table.html.includes('old')); assert.ok(table.html.endsWith('new124|'));
+});
+check('Release lookup prefers matching artist, orders by year, and marks other artists as unverified', () => {
+  const track = (artistName, trackName, releaseDate) => ({kind:'song',artistName,trackName,releaseDate});
+  const records = [track('別の歌手','曲A','1990-01-01'),track('歌手Ａ','曲A','2020-01-01'),track('歌手A','曲A - Remastered','2010-01-01'),track('歌手A','曲A カラオケ','2000-01-01')];
+  const matched = api.selectReleaseCandidates({artist:'歌手A',title:'曲A'},records);
+  assert.equal(matched.verified,true); assert.deepEqual(plain(matched.tracks.map(x => x.releaseDate)),['2010-01-01','2020-01-01']);
+  const fallback = api.selectReleaseCandidates({artist:'別人',title:'曲A'},records);
+  assert.equal(fallback.verified,false); assert.equal(fallback.tracks[0].artistName,'別の歌手');
+  assert.equal(api.selectReleaseCandidates({artist:'別人',title:'存在しない曲'},records).tracks.length,0);
 });
 check('Kana readings follow typing and preserve manual corrections', () => {
   const name = {value:'あ'}, reading = {value:'',dataset:{}};

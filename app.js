@@ -294,7 +294,6 @@
     if (!list.length) {
       $('#song-list').innerHTML = '';
       $('#mobile-song-list').innerHTML = '';
-      $('#list-pagination').classList.add('hidden');
       $('#list-progress').textContent = '';
       updateDataUi();
       return;
@@ -306,7 +305,6 @@
     const listType = canEdit ? ' owner-list' : ' public-list';
     pageLimit = Math.min(100, list.length);
     const shown = list.slice(0, pageLimit);
-    $('#list-pagination').classList.add('hidden');
     $('#list-progress').textContent = list.length > pageLimit ? '残りの曲を表示しています…' : '';
     if (mobileLayout.matches) {
       if ($('#song-list').hasChildNodes()) $('#song-list').replaceChildren();
@@ -659,10 +657,6 @@
     if (action === 'work-info') { event.preventDefault(); return openWorkInfo(song); }
     if (action === 'operation-menu') { if (canMutate()) openOperationMenu(song); return; }
     if (action === 'history') return openHistory(song.id);
-    if (action === 'chord-search') {
-      window.open('https://www.google.com/search?q=' + encodeURIComponent(song.artist + ' ' + song.title + ' Chordwiki'), '_blank', 'noopener,noreferrer');
-      return;
-    }
     if (!canMutate()) return;
     if (action === 'add-artist') return openSongDialog(null, { artist: song.artist, artistKana: song.artistKana });
     if (action === 'edit') return openSongDialog(song);
@@ -1050,7 +1044,6 @@
   function applyUrlFilters() {
     const params = new URLSearchParams(window.location.search);
     $('#search-input').value = params.get('q') || '';
-    params.delete('genre');
   }
 
   async function start() {
@@ -1181,7 +1174,7 @@
     const previous = picker.value;
     picker.innerHTML = pendingDrafts.map((draft) => '<option value="' + escapeHtml(draft.draftId) + '">' + escapeHtml(new Date(draft.updatedAt).toLocaleString('ja-JP')) + '・' + draft.songs.length + '曲</option>').join('');
     if (pendingDrafts.some((d) => d.draftId === previous)) picker.value = previous;
-    document.querySelectorAll('#add-button,#empty-add,#import-button,#artist-manage-button,#save-song-button,[data-action]:not([data-action="chord-search"]):not([data-action="search-menu"]):not([data-action="work-info"])').forEach((el) => { el.disabled = !canMutate(false); });
+    document.querySelectorAll('#add-button,#empty-add,#import-button,#artist-manage-button,#save-song-button,[data-action]:not([data-action="search-menu"]):not([data-action="work-info"])').forEach((el) => { el.disabled = !canMutate(false); });
     $('#export-button').disabled = loadState !== 'ready';
     $('#history-open-button').disabled = loadState !== 'ready';
     $('#review-open-button').disabled = loadState !== 'ready';
@@ -1402,13 +1395,6 @@
     $('#conflict-form').addEventListener('submit', resolveConflicts);
     $('#mobile-song-list').addEventListener('click', handleListAction);
     $('#artist-filter').addEventListener('change', () => { pageLimit = 100; render(); });
-    $('#load-more').addEventListener('click', () => { pageLimit += 100; render(); });
-    $('#show-all').addEventListener('click', () => {
-      if (loadState !== 'ready') return;
-      const total = filteredSongs().length;
-      pageLimit = total; render();
-      announce('全' + total.toLocaleString('ja-JP') + '曲を表示しました。');
-    });
     $('#artist-picker').addEventListener('input', chooseArtist);
     $('#duplicate-edit').addEventListener('click', () => openSongDialog(songs.find((s) => s.id === $('#duplicate-edit').dataset.id)));
     $('#artist-manage-button').addEventListener('click', openArtistManager);
@@ -1497,6 +1483,15 @@
       field.innerHTML = '<div class="work-info-result">' + Object.entries(credits).map(([role, names]) => '<div>' + role + '：' + (names.length ? names.map(escapeHtml).join('、') : '情報なし') + '</div>').join('') + '</div><p><a href="https://ja.wikipedia.org/?curid=' + encodeURIComponent(page.pageid) + '" target="_blank" rel="noopener noreferrer">出典：Wikipedia「' + escapeHtml(page.title) + '」 ↗</a>（<a href="https://creativecommons.org/licenses/by-sa/4.0/deed.ja" target="_blank" rel="noopener noreferrer">CC BY-SA</a>）</p>' + (Object.values(credits).some((names) => !names.length) ? '<p><a href="' + escapeHtml(searchUrl) + '" target="_blank" rel="noopener noreferrer">作詞・作曲をGoogleで検索 ↗</a></p>' : '');
     } catch (_) { if (currentWorkInfo === state) fallback('Wikipediaの情報を取得できませんでした。'); }
   }
+  function selectReleaseCandidates(song, results) {
+    const normalize = (text) => String(text || '').normalize('NFKC').toLocaleLowerCase('ja').replace(/[\s\p{P}\p{S}]/gu, '');
+    const title = normalize(song.title), artist = normalize(song.artist);
+    if (!title || !artist) return { tracks:[], verified:false };
+    const candidates = (Array.isArray(results) ? results : []).filter((track) => track.kind === 'song' && /^\d{4}-\d{2}-\d{2}/.test(track.releaseDate || '') && normalize(track.trackName).includes(title) && !/カラオケ|オルゴール|instrumental|off\s*vocal/i.test(track.trackName || ''));
+    const matched = candidates.filter((track) => normalize(track.artistName) === artist);
+    const selected = matched.length ? matched : candidates;
+    return { tracks:selected.slice().sort((a,b) => a.releaseDate.localeCompare(b.releaseDate)).slice(0,8), verified:matched.length > 0 };
+  }
   let currentWorkInfo = null;
   async function openWorkInfo(song) {
     if ($('#search-dialog').open) $('#search-dialog').close();
@@ -1515,10 +1510,9 @@
       return response.json();
     }).then((data) => {
       if (currentWorkInfo !== state) return;
-      const normalize = (text) => String(text || '').normalize('NFKC').toLocaleLowerCase('ja').replace(/[\s\p{P}\p{S}]/gu, '');
-      const wanted = normalize(song.title);
-      const tracks = (Array.isArray(data.results) ? data.results : []).filter((track) => track.kind === 'song' && /^\d{4}/.test(track.releaseDate || '') && normalize(track.trackName).includes(wanted) && !/カラオケ|オルゴール|instrumental|off\s*vocal/i.test(track.trackName || '')).sort((a, b) => a.releaseDate.localeCompare(b.releaseDate)).slice(0, 8);
-      $('#work-info-release').innerHTML = tracks.length ? '<div class="work-info-options">' + tracks.map((track) => '<div class="work-info-result"><strong>' + escapeHtml(track.releaseDate.slice(0, 4)) + '年</strong>　' + escapeHtml(track.trackName || '') + '<br><small>' + escapeHtml(track.artistName || '') + ' / ' + escapeHtml(track.collectionName || '') + '</small></div>').join('') + '</div>' : '一致する発売年を確認できませんでした。';
+      const { tracks, verified } = selectReleaseCandidates(song, data.results);
+      const notice = verified ? '' : '<p class="subtle">アーティスト名が一致する配信情報を確認できませんでした。同名曲の候補として表示します。</p>';
+      $('#work-info-release').innerHTML = tracks.length ? notice + '<div class="work-info-options">' + tracks.map((track) => '<div class="work-info-result"><strong>' + escapeHtml(track.releaseDate.slice(0, 4)) + '年</strong>　' + escapeHtml(track.trackName || '') + '<br><small>' + escapeHtml(track.artistName || '') + ' / ' + escapeHtml(track.collectionName || '') + '</small></div>').join('') + '</div>' : '一致する発売年を確認できませんでした。';
     }).catch(() => { if (currentWorkInfo === state) $('#work-info-release').textContent = 'Appleの配信情報を取得できませんでした。'; });
     if (!user || !supabase || sharedListMode) {
       $('#work-info-jasrac').textContent = 'J-WIDの情報はログイン後のリストから確認できます。';

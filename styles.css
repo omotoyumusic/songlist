@@ -232,7 +232,6 @@ button:disabled { cursor: wait; opacity: .6; }
 .song-table.owner-list col.notes { width: 12%; }
 .song-table.owner-list col.actions { width: 12%; }
 .mobile-song-list { display: none; }
-.load-more { display: block; margin: 18px auto; }
 .auth-recovery-links { display: grid; justify-items: center; gap: 5px; margin-top: 18px; }
 .auth-recovery-links button { min-height: 40px; padding: 4px 10px; border: 0; background: none; color: #286a44; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .dialog-content { padding: 26px 29px; font-size: 13px; line-height: 1.8; }
@@ -387,9 +386,6 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 }
 
 /* Index and paging controls are shared by the table and mobile cards. */
-.list-pagination { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; padding: 16px 12px; }
-.list-pagination .load-more { display: inline-flex; margin: 0; }
-.list-pagination .button { min-height: 44px; }
 #kana-index-help { display: block; margin-top: 4px; color: #51745c; }
 .kana-index { position: fixed; right: max(12px,env(safe-area-inset-right)); z-index: 8; display: grid; grid-template-rows: repeat(11,minmax(0,1fr)); width: 28px; padding: 3px 0; border: 1px solid #d7e8dc; border-radius: 16px; background: #f6fbf7f2; box-shadow: 0 2px 10px #17392612; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .kana-index.is-dragging, .kana-index:focus-within { background: #e9f5ed; box-shadow: 0 3px 15px #17392625; }
